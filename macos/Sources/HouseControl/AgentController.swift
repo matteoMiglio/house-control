@@ -23,6 +23,8 @@ final class AgentController: NSObject, AgentBackend {
     /// Reloads every view after the plan changed (and tells paired iPhones).
     private let reloadAll: () -> Void
     var onLiveChange: ((Bool) -> Void)?
+    var onHostChange: ((WebHost?) -> Void)?
+    private weak var host: WebHost?
 
     private(set) var phase: Phase = .off
     private var window: AgentWindow?
@@ -253,8 +255,7 @@ final class AgentController: NSObject, AgentBackend {
     func showWindow() {
         if window == nil {
             let host = WebHost(mode: "agent", transparent: false) { [unowned self] in ["agent": self.status()] }
-            host.onMessage = { [weak self] message in self?.handle(message) }
-            let window = AgentWindow(host: host)
+            let window = AgentWindow(host: host, controller: self)
             window.onClose = { [weak self, unowned host] in
                 host.webView.configuration.userContentController.removeScriptMessageHandler(forName: "house")
                 self?.window = nil
@@ -263,6 +264,20 @@ final class AgentController: NSObject, AgentBackend {
             host.load()
         }
         window?.show()
+    }
+
+    func attach(_ host: WebHost) {
+        detach()
+        self.host = host
+        host.onMessage = { [weak self] message in self?.handle(message) }
+        onHostChange?(host)
+        push()
+    }
+
+    func detach() {
+        host?.onMessage = nil
+        host = nil
+        onHostChange?(nil)
     }
 
     private func handle(_ message: [String: Any]) {
@@ -343,7 +358,7 @@ final class AgentController: NSObject, AgentBackend {
     }
 
     private func push() {
-        window?.host.call("agentStatus", status())
+        host?.call("agentStatus", status())
     }
 }
 
@@ -352,10 +367,12 @@ final class AgentController: NSObject, AgentBackend {
 final class AgentWindow: NSObject, NSWindowDelegate {
     let host: WebHost
     private let window: NSWindow
+    private weak var controller: AgentController?
     var onClose: (() -> Void)?
 
-    init(host: WebHost) {
+    init(host: WebHost, controller: AgentController) {
         self.host = host
+        self.controller = controller
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 820),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                           backing: .buffered, defer: false)
@@ -373,6 +390,7 @@ final class AgentWindow: NSObject, NSWindowDelegate {
         window.contentView = host.webView
         window.center()
         window.setFrameAutosaveName("HouseControlAgent")
+        controller.attach(host)
     }
 
     func show() {
@@ -380,5 +398,8 @@ final class AgentWindow: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
-    func windowWillClose(_ notification: Notification) { onClose?() }
+    func windowWillClose(_ notification: Notification) {
+        controller?.detach()
+        onClose?()
+    }
 }
