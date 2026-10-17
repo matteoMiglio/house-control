@@ -39,8 +39,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Desktop widgets and Control Center controls: what they show, what they asked for.
     private let widgets = WidgetBridge()
 
+    /// All entry points share one route; the AppKit controllers still own their windows.
+    lazy var router = WindowRouter { [weak self] destination in
+        guard let self else { return }
+        switch destination {
+        case .home: self.togglePanel()
+        case .editor(let section): self.openEditor(section: section)
+        case .agent: self.openAgent()
+        case .pairing: self.pairPhone()
+        case .settings: break // The Settings scene is a placeholder until step 4.
+        }
+    }
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Menu bar only: HOUSE_DOCK=1 shows a Dock icon for UI automation.
+        NSApp.setActivationPolicy(ProcessInfo.processInfo.environment["HOUSE_DOCK"] != nil ? .regular : .accessory)
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        buildMainMenu()
         stopTunnelOnSignals()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -80,28 +96,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         if ProcessInfo.processInfo.environment["HOUSE_OPEN_PAIRING"] != nil {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in self?.pairPhone() }
+            router.show(.pairing)
         }
         if ProcessInfo.processInfo.environment["HOUSE_OPEN_EDITOR"] != nil {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in self?.openEditor() }
+            router.show(.editor(section: nil))
         }
         if let open = ProcessInfo.processInfo.environment["HOUSE_OPEN_AGENT"] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-                self?.openAgent()
+            router.show(.agent) { [weak self] in
                 if open == "start" { self?.agent.start() }
             }
         }
         if ProcessInfo.processInfo.environment["HOUSE_OPEN_ON_LAUNCH"] != nil {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in self?.togglePanel() }
+            router.show(.home)
         }
     }
 
     /// `housecontrol://open[?device=…]`: a click on a widget opens the panel (on that lamp, AC or room).
     func application(_ application: NSApplication, open urls: [URL]) {
         guard let url = urls.first, url.scheme == SyncPairing.scheme, url.host == "open" else { return }
-        if !panel.isVisible { togglePanel() }
-        if let device = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "device" })?.value {
-            panel.host.call("openDevice", device)
+        let device = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "device" })?.value
+        router.whenReady { [weak self] in
+            guard let self else { return }
+            if !self.panel.isVisible { self.router.show(.home) }
+            if let device { self.panel.host.call("openDevice", device) }
         }
     }
 
@@ -175,7 +192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if NSApp.currentEvent?.type == .rightMouseUp {
             panel.hide()
             let menu = NSMenu()
-            menu.addItem(withTitle: "Edit Home…", action: #selector(openEditor), keyEquivalent: "").target = self
+            menu.addItem(withTitle: "Edit Home…", action: #selector(requestEditor), keyEquivalent: "").target = self
             menu.addItem(withTitle: "Load Floor Plan…", action: #selector(loadPlan), keyEquivalent: "").target = self
             menu.addItem(withTitle: "Reveal Plan File", action: #selector(revealPlan), keyEquivalent: "").target = self
             menu.addItem(withTitle: "Reveal Device Log", action: #selector(revealLog), keyEquivalent: "").target = self
@@ -188,8 +205,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                          action: #selector(toggleOpenAtLogin), keyEquivalent: "")
             loginItem.target = self
             loginItem.state = login == .on ? .on : login == .needsApproval ? .mixed : .off
-            menu.addItem(withTitle: "Pair iPhone…", action: #selector(pairPhone), keyEquivalent: "").target = self
-            let aiItem = menu.addItem(withTitle: agent.isLive ? "AI Access — Live" : "AI Access…", action: #selector(openAgent), keyEquivalent: "")
+            menu.addItem(withTitle: "Pair iPhone…", action: #selector(requestPairing), keyEquivalent: "").target = self
+            let aiItem = menu.addItem(withTitle: agent.isLive ? "AI Access — Live" : "AI Access…", action: #selector(requestAgent), keyEquivalent: "")
             aiItem.target = self
             aiItem.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)
             if agent.isLive {
@@ -318,10 +335,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.activateFileViewerSelecting([hub.log.fileURL])
     }
 
-    @objc private func openEditor() {
+    @objc private func requestEditor() { router.show(.editor(section: nil)) }
+    @objc private func requestAgent() { router.show(.agent) }
+    @objc private func requestPairing() { router.show(.pairing) }
+
+    private func openEditor(section: String? = nil) {
         panel.hide()
         if editor == nil {
-            let host = WebHost(mode: "editor", transparent: false) { [unowned self] in self.bootPayload() }
+            let host = WebHost(mode: "editor", transparent: false) { [unowned self] in
+                var boot = self.bootPayload()
+                if let section { boot["section"] = section }
+                return boot
+            }
             host.onMessage = { [weak self, unowned host] message in self?.handle(message, from: host) }
             let controller = EditorController(host: host)
             controller.onClose = { [weak self, unowned host] in
@@ -349,7 +374,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "ready", "summary":
             // A view that has just loaded takes over what the panel shows.
             if message["type"] as? String == "ready", host !== panel.host { panel.host.call("share") }
-            if message["type"] as? String == "ready", host === panel.host { widgets.isReady = true }
+            if message["type"] as? String == "ready", host === panel.host {
+                widgets.isReady = true
+                router.markReady()
+            }
             if let summary = (message["summary"] as? [String: Any]) ?? (message["lightsOn"] != nil ? message : nil) {
                 updateStatus(summary)
             }
@@ -372,9 +400,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 editor?.host.load()
             }
         case "loadPlan": loadPlan()
-        case "openAgent": openAgent()
+        case "openAgent": router.show(.agent)
         case "revealPlan": revealPlan()
-        case "openEditor": openEditor()
+        case "openEditor": router.show(.editor(section: message["section"] as? String))
         case "quit": NSApp.terminate(nil)
         case "setOpenAtLogin": setOpenAtLogin(message["on"] as? Bool ?? false)
 
@@ -502,7 +530,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - AI Access
 
-    @objc private func openAgent() {
+    private func openAgent() {
         panel.hide()
         agent.showWindow()
     }
@@ -640,7 +668,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Shows the QR code an iPhone scans once to find this Mac and receive its floor plan.
-    @objc private func pairPhone() {
+    private func pairPhone() {
         panel.hide()
         let pairing = sync.enable(name: computerName)
         if pairingWindow == nil {
@@ -717,36 +745,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                           detail: "Switch to Smart Life on the iPhone, tap the scanner on its Home tab and confirm the login. "
                               + "Then return to House Control: this window closes once the iPhone is signed in.")
         loginWindow?.setStatus("Requested by \(device)", active: true)
-    }
-
-    // MARK: - Menu (gives the editor window the usual shortcuts)
-
-    private func buildMainMenu() {
-        let main = NSMenu()
-        let appItem = NSMenuItem()
-        let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Quit House Control", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        appItem.submenu = appMenu
-        main.addItem(appItem)
-
-        let editItem = NSMenuItem()
-        let edit = NSMenu(title: "Edit")
-        edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
-        edit.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
-        edit.addItem(.separator())
-        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-        editItem.submenu = edit
-        main.addItem(editItem)
-
-        let windowItem = NSMenuItem()
-        let window = NSMenu(title: "Window")
-        window.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
-        window.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
-        windowItem.submenu = window
-        main.addItem(windowItem)
-        NSApp.mainMenu = main
     }
 }

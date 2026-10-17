@@ -11,6 +11,10 @@ APP="${APP_PATH:-$ROOT/build/HouseControl.app}"
 VERSION="${VERSION:-$(sed -n 's/^MARKETING_VERSION *= *//p' "$ROOT/ios/Config/Base.xcconfig")}"
 BUILD="${BUILD:-$(sed -n 's/^CURRENT_PROJECT_VERSION *= *//p' "$ROOT/ios/Config/Base.xcconfig")}"
 
+# Keep the full compiler output for failures, and the usual quiet output for success.
+BUILD_LOG="$(mktemp)"
+trap 'rm -f "$BUILD_LOG"' EXIT
+
 echo "▸ Building web UI"
 cd "$ROOT/web"
 [ -d node_modules ] || npm install
@@ -20,7 +24,12 @@ echo "▸ Building native shell"
 cd "$ROOT/macos"
 ARCH_FLAGS=()
 [ -n "${UNIVERSAL:-}" ] && ARCH_FLAGS=(--arch arm64 --arch x86_64)
-swift build -c release ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"} 2>&1 | grep -E "error|warning: unused|Build complete" || true
+if ! swift build -c release ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"} >"$BUILD_LOG" 2>&1; then
+  cat "$BUILD_LOG"
+  exit 1
+fi
+grep -E "error|warning: unused|Build complete" "$BUILD_LOG" || true
+# Only use the executable after SwiftPM has successfully validated the current sources.
 BIN="$(swift build -c release ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"} --show-bin-path)/HouseControl"
 [ -x "$BIN" ] || { echo "Swift build failed"; exit 1; }
 
@@ -41,10 +50,14 @@ if [ -z "${SKIP_WIDGETS:-}" ]; then
   xcodegen generate --quiet
   WIDGET_ARCHS=()
   [ -n "${UNIVERSAL:-}" ] && WIDGET_ARCHS=(ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO)
-  xcodebuild -project HouseWidgetsMac.xcodeproj -scheme HouseWidgets -configuration Release \
+  if ! xcodebuild -project HouseWidgetsMac.xcodeproj -scheme HouseWidgets -configuration Release \
     -derivedDataPath build/DerivedData -destination 'generic/platform=macOS' \
     CODE_SIGN_IDENTITY="${CODESIGN_IDENTITY:--}" DEVELOPMENT_TEAM="$TEAM" ${WIDGET_ARCHS[@]+"${WIDGET_ARCHS[@]}"} \
-    build 2>&1 | grep -E "error:|BUILD FAILED" || true
+    build >"$BUILD_LOG" 2>&1; then
+    cat "$BUILD_LOG"
+    exit 1
+  fi
+  grep -E "error:|BUILD FAILED" "$BUILD_LOG" || true
   APPEX="$ROOT/widgets/build/DerivedData/Build/Products/Release/HouseWidgets.appex"
   [ -d "$APPEX" ] || { echo "Widget build failed"; exit 1; }
 fi
@@ -72,7 +85,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$BUILD</string>
-  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>NSHumanReadableCopyright</key><string>© 0xProbability. MIT License.</string>
   <key>LSUIElement</key><true/>
