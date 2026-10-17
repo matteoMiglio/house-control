@@ -8,6 +8,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { buildHouse } from './house.js';
 import { buildSite } from './site.js';
 import { CameraUnit, cameraColor, cameraQuaternion, halfAngles } from './cctv.js';
+import { coverage, coverageCanvas } from '../coverage.js';
 import { buildFurniture } from './furniture.js';
 import { LightUnit } from './lights.js';
 import { ACUnit } from './ac.js';
@@ -80,6 +81,10 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
   let pov = null; // the id of the camera looked through
   let house = null;
   let site = null;
+  // What the cameras see, drawn on the ground outside: all of them (null) or one camera's id.
+  let coverageOf = null;
+  let coverageMesh = null;
+  const coverageMaps = new Map();
   scene.add(buildFurniture(config.furniture));
 
   const lights = new Map();
@@ -275,9 +280,37 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
       unit.group.visible = unit.id !== pov && (outside || onHouse(unit.cfg));
       unit.view.visible = outside && !pov;
     }
+    drawCoverage();
     // Under the roof the rooms and their devices cannot be seen, so they cannot be picked either.
     const indoors = house.whole && config.roof ? [] : [...[...lights.values()].map((u) => u.hit), ...[...acs.values()].map((u) => u.hit), ...house.floors];
     hitTargets = [...[...cameras.values()].filter((u) => u.group.visible).map((u) => u.hit), ...indoors];
+  }
+
+  function drawCoverage() {
+    if (coverageMesh) {
+      scene.remove(coverageMesh);
+      coverageMesh.geometry.dispose();
+      coverageMesh.material.map.dispose();
+      coverageMesh.material.dispose();
+      coverageMesh = null;
+    }
+    if (!outside || pov || !config.cameras.length) return;
+    const key = coverageOf ?? '*';
+    if (!coverageMaps.has(key)) {
+      coverageMaps.set(key, coverage(config, { cameras: coverageOf ? config.cameras.filter((c) => c.id === coverageOf) : config.cameras }));
+    }
+    const map = coverageMaps.get(key);
+    const texture = new THREE.CanvasTexture(coverageCanvas(map, { blind: !coverageOf }));
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const w = map.cols * map.size;
+    const d = map.rows * map.size;
+    coverageMesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({
+      map: texture, transparent: true, depthWrite: false, toneMapped: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    }));
+    coverageMesh.position.set(map.x0 + w / 2, 0.02, map.z0 + d / 2);
+    coverageMesh.renderOrder = 2;
+    scene.add(coverageMesh);
   }
 
   // The picture of the camera looked through, fitted into the part of the stage that is not covered.
@@ -528,6 +561,14 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     get pov() { return pov; },
     /** Shows the picture of a security camera, or (null) the model again. */
     lookThrough: setPov,
+    /** Draws on the ground what all the cameras (null) or one of them can see, outside. */
+    showCoverage(id = null) {
+      const next = id && cameras.has(id) ? id : null;
+      if (next === coverageOf) return;
+      coverageOf = next;
+      drawCoverage();
+      wake();
+    },
 
     setInsets(top, bottom) { topInset = top; bottomInset = bottom; resize(); },
     resize,
@@ -568,6 +609,9 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     dispose() {
       unsubscribe();
       for (const unit of cameras.values()) unit.dispose();
+      coverageOf = null;
+      outside = false;
+      drawCoverage();
       running = false;
       if (raf) cancelAnimationFrame(raf);
       raf = 0;

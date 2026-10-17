@@ -29,8 +29,9 @@
 - **Scenes.** One tap sets every light and AC — "Cozy", "Movie", "Night", or your own.
 - **A visual editor.** Draw the rooms, drop in furniture, place lamps and ACs, and link each one to a real device.
 - **The view from outside, for planning security cameras.** The whole house on its plot — property line, fences,
-  gates, trees, sheds, the drive and the cars on it. Hang cameras on the walls, see the ground each one covers, and look through its
-  lens before you drill. See [the floor plan file](docs/floor-plan.md#cameras).
+  gates, trees, sheds, the drive and the cars on it. Hang cameras on the walls and see what each one really makes
+  out past fences, trees and cars, where the blind spots are and which doors nobody watches; look through its lens
+  before you drill. See [the floor plan file](docs/floor-plan.md#cameras).
 - **Your devices, wherever they live.** Smart Life / Tuya, Home Assistant (and the thousands of brands it runs),
   Philips Hue and Apple Home — mixed freely in one home. See [Connect real devices](#connect-real-devices).
 - **An island around the notch.** Rest the pointer on the MacBook's notch and a small live model of the home drops

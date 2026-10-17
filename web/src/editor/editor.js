@@ -10,6 +10,7 @@ import {
 import { createWorld } from '../three/world.js';
 import { wallSegments, EXT_T } from '../three/house.js';
 import { viewEdge, cameraColor } from '../three/cctv.js';
+import { coverage, entrances, coverageCanvas, levelDistances, LEVELS, BLIND_COLOR } from '../coverage.js';
 import { FURNITURE_TYPES, footprint } from '../three/furniture.js';
 import { h, clamp } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
@@ -36,6 +37,8 @@ const RESOLUTIONS = [['1920x1080', '1080p · 2 MP'], ['2560x1440', '2K · 4 MP']
 // Plan handles: dragging one reshapes or aims the selected item instead of moving it.
 const HANDLES = new Set(['resize', 'corner', 'end', 'oresize', 'aim']);
 const AIM_REACH = 1; // metres from a camera to the knob that aims it
+const LEVEL_MEANS = { detect: 'that someone is there', observe: 'what someone is doing', recognise: 'someone you know', identify: 'a stranger’s face' };
+const sqm = (v) => `${Math.round(v)} m²`;
 const FLOOR_FILL = { oak: '#4a3d2e', walnut: '#3c2f28', tile: '#39424b', stone: '#30353c' };
 const WALLS = ['north', 'east', 'south', 'west'];
 const SCENE_ICONS = ['sun', 'sofa', 'film', 'moon', 'door', 'table', 'bed', 'tv', 'sparkles'];
@@ -155,7 +158,7 @@ export async function bootEditor(root) {
     sel = next;
     lastSnapshotKey = null;
     // Cameras and what is outside are best seen from outside; a camera through its own lens.
-    if (['camera', 'outdoor', 'site'].includes(next.kind) && before !== next.kind) previewOutside = true;
+    if (['camera', 'outdoor', 'site', 'coverage'].includes(next.kind) && before !== next.kind) previewOutside = true;
     if (next.kind === 'camera' && before !== 'camera') previewPov = true;
     renderSidebar();
     renderPlan();
@@ -191,6 +194,45 @@ export async function bootEditor(root) {
     if (isPhone) phone.refresh();
   }
 
+  // What the cameras make out (coverage.js), for all of them or one; kept while the plan is unchanged.
+  const coverageCache = new Map();
+  function coverageFor(cameraId = null) {
+    let cfg;
+    try { cfg = normalize(structuredClone(doc)); } catch { return null; }
+    const cams = cameraId ? cfg.cameras.filter((c) => c.id === cameraId) : cfg.cameras;
+    if (!cams.length) return null;
+    const key = JSON.stringify([doc.rooms, doc.openings, doc.outdoor, doc.cameras, doc.site, doc.wallHeight, cameraId]);
+    if (!coverageCache.has(key)) {
+      const map = coverage(cfg, { cameras: cams });
+      coverageCache.set(key, {
+        map, stats: map.stats, ways: cameraId ? null : entrances(cfg),
+        image: coverageCanvas(map, { blind: !cameraId }).toDataURL(),
+      });
+      if (coverageCache.size > 6) coverageCache.delete(coverageCache.keys().next().value);
+    }
+    return coverageCache.get(key);
+  }
+
+  // While something is dragged the plan keeps the coverage it last showed, and works it out
+  // again once the pointer rests: a fresh grid on every move would make dragging stutter.
+  const coverageShown = new Map();
+  let coverageDue = false;
+  let coverageTimer = 0;
+  function coverageNow(cameraId = null) {
+    const key = cameraId ?? '*';
+    if (drag?.moved && !coverageDue && coverageShown.has(key)) {
+      clearTimeout(coverageTimer);
+      coverageTimer = setTimeout(() => {
+        coverageDue = true;
+        try { renderSidebar(); renderPlan(); renderInspector(); } finally { coverageDue = false; }
+      }, 150);
+      return coverageShown.get(key);
+    }
+    const c = coverageFor(cameraId);
+    coverageShown.set(key, c);
+    return c;
+  }
+
   function previewStore(cfg) {
     const state = { lights: {}, acs: {} };
     for (const l of cfg.lights) state.lights[l.id] = { on: previewLights, brightness: 0.85, temp: 3200, color: l.color || null };
@@ -216,6 +258,7 @@ export async function bootEditor(root) {
     previewToggle.hidden = pov || previewOutside;
     if (!world) return;
     world.setOutside(previewOutside);
+    world.showCoverage(cam?.id ?? null);
     world.lookThrough(pov ? cam.id : null);
   }
 
@@ -274,7 +317,9 @@ export async function bootEditor(root) {
       icon('home', 15), h('span.row-name', 'Home settings')),
     links.sidebarRow(sel.kind === 'connections' || sel.kind === 'service', () => select({ kind: 'connections' })),
     h(`button.row.home-row${sel.kind === 'site' ? '.active' : ''}`, { onclick: () => select({ kind: 'site' }) },
-      icon('fence', 15), h('span.row-name', 'Property line'), h('span.row-sub', doc.site?.boundary ? `${doc.site.boundary.length} corners` : 'none'))];
+      icon('fence', 15), h('span.row-name', 'Property line'), h('span.row-sub', doc.site?.boundary ? `${doc.site.boundary.length} corners` : 'none')),
+    h(`button.row.home-row${sel.kind === 'coverage' ? '.active' : ''}`, { onclick: () => select({ kind: 'coverage' }) },
+      icon('radar', 15), h('span.row-name', 'Camera coverage'), h('span.row-sub', coverageSummary()))];
     for (const kind of Object.keys(KEYS)) {
       const items = doc[KEYS[kind]];
       nodes.push(h('div.group',
@@ -293,6 +338,12 @@ export async function bootEditor(root) {
     const top = sidebar.scrollTop;
     sidebar.replaceChildren(...nodes);
     sidebar.scrollTop = top;
+  }
+
+  function coverageSummary() {
+    if (!doc.cameras.length) return 'no cameras';
+    const c = coverageNow();
+    return c?.stats.plot ? `${Math.round((c.stats.seen / c.stats.plot) * 100)}% seen` : '—';
   }
 
   function uniqueId(base) {
@@ -461,6 +512,15 @@ export async function bootEditor(root) {
       kids.push(sv('polygon', { points, class: `p-site${sel.kind === 'site' ? ' sel' : ''}`, 'data-kind': 'site' }));
       if (big) kids.push(sv('polygon', { points, class: 'p-hit p-site-hit', 'data-kind': 'site' }));
     }
+    // What the cameras make out: one camera's view while it is picked, all of them on the coverage screen.
+    const covering = sel.kind === 'coverage' ? coverageNow() : sel.kind === 'camera' && doc.cameras[sel.index] ? coverageNow(doc.cameras[sel.index].id) : null;
+    if (covering) {
+      const { map } = covering;
+      kids.push(sv('image', {
+        href: covering.image, x: map.x0, y: map.z0, width: map.cols * map.size, height: map.rows * map.size,
+        preserveAspectRatio: 'none', class: 'p-coverage',
+      }));
+    }
     // Paving lies under everything; the rest of what is outside stands among the rooms.
     const outdoorNodes = [];
     doc.outdoor.forEach((o, i) => {
@@ -573,6 +633,14 @@ export async function bootEditor(root) {
         kids.push(sv('line', { x1: c.pos[0], y1: c.pos[1], x2: kx, y2: kz, class: 'p-aim-line' }));
         if (big) kids.push(sv('circle', { cx: kx, cy: kz, r: 0.5, class: 'hit', 'data-kind': 'aim', 'data-index': i }));
         kids.push(sv('circle', { cx: kx, cy: kz, r: big ? 0.2 : 0.13, class: 'p-handle aim', 'data-kind': 'aim', 'data-index': i }));
+      }
+    }
+
+    if (sel.kind === 'coverage' && covering?.ways) {
+      for (const w of covering.ways) {
+        kids.push(sv('circle', {
+          cx: w.at[0], cy: w.at[1], r: 0.24, class: 'p-way', style: `--way: ${w.level ? LEVELS[w.level - 1].color : BLIND_COLOR}`,
+        }, sv('title', {}, document.createTextNode(`${w.name}: ${w.level ? LEVELS[w.level - 1].name : 'not seen'}`))));
       }
     }
 
@@ -767,7 +835,9 @@ export async function bootEditor(root) {
     const moved = drag?.moved;
     drag = null;
     lastSnapshotKey = null;
-    if (moved && !isPhone) renderPlan();
+    clearTimeout(coverageTimer);
+    // Fit the view again, and bring the coverage up to date.
+    if (moved) { renderSidebar(); renderPlan(); renderInspector(); }
   };
   plan.addEventListener('pointerup', () => { if (!isPhone) endDrag(); });
   plan.addEventListener('pointercancel', () => { if (!isPhone) endDrag(); });
@@ -821,7 +891,11 @@ export async function bootEditor(root) {
     if (kind === 'home') {
       head('Home', 'Global settings of this plan');
       doc.camera ||= { azimuth: 34, elevation: 47 };
-      if (isPhone) nodes.push(section('Real devices', links.sidebarRow(false, () => select({ kind: 'connections' }))));
+      if (isPhone) {
+        nodes.push(section('Real devices', links.sidebarRow(false, () => select({ kind: 'connections' }))),
+          section('Security cameras', h('button.row.home-row', { onclick: () => select({ kind: 'coverage' }) },
+            icon('radar', 15), h('span.row-name', 'Camera coverage'), h('span.row-sub', coverageSummary()))));
+      }
       nodes.push(section('Building',
         row(bind('Wall height, m', number(0.1), { ...prop(doc, 'wallHeight', 2.6), parse: parseNum }),
           bind('Inner walls shown, m', number(0.05), { ...prop(doc, 'interiorWallHeight', 1.25), parse: parseNum })),
@@ -869,6 +943,35 @@ export async function bootEditor(root) {
       }
       nodes.push(section('Ground',
         bind('Inside the line', choice(GROUND_KINDS), { ...prop(doc.site, 'ground', 'grass'), event: 'change' })));
+    } else if (kind === 'coverage') {
+      head('Camera coverage', 'What your cameras make out, past walls, fences, trees and cars');
+      const c = coverageNow();
+      if (!c) {
+        nodes.push(section('No cameras yet',
+          h('p.note', 'Add a security camera and drop it on the outside of a wall. This screen then shows how much of your plot the cameras see, how much detail they have where, and which doors and gates nobody watches.'),
+          h('button.btn.primary.wide', { onclick: () => add('camera') }, icon('plus', 14, 2.4), 'Add a camera')));
+      } else {
+        const { stats, ways } = c;
+        const pct = (v) => (stats.plot ? Math.round((v / stats.plot) * 100) : 0);
+        const blind = stats.plot - stats.seen;
+        const bands = [...LEVELS.map((l, i) => ({ color: l.color, name: l.name, means: LEVEL_MEANS[l.id], area: stats.byLevel[i] })).reverse(),
+          { color: BLIND_COLOR, name: 'Not seen', means: 'blind spots on the plot', area: blind }];
+        nodes.push(section('The plot',
+          h('div.cov-total', h('b', `${pct(stats.seen)}%`), h('span', `of ${sqm(stats.plot)} is seen by at least one camera`)),
+          h('div.cov-bar', bands.map((b) => h('i', { style: { flexGrow: String(b.area), background: b.color } }))),
+          h('div.cov-legend', bands.map((b) => h('div.cov-row', h('i', { style: { background: b.color } }),
+            h('span', h('b', b.name), ` · ${b.means}`), h('em', `${pct(b.area)}%`))))),
+        section('Ways in',
+          ways.length ? ways.map((w) => {
+            const l = w.level ? LEVELS[w.level - 1] : null;
+            const cam = doc.cameras.find((x) => x.id === w.camera);
+            return h('div.cov-row.way', h('i', { style: { background: l?.color || BLIND_COLOR } }),
+              h('span', h('b', w.name), cam ? ` · ${cam.name || cam.id}` : ''), h('em', l ? l.name : 'Not seen'));
+          }) : h('p.note', 'No doors in the outer walls or gates on the plan yet.'),
+          h('p.note', 'For each door and gate: the most any camera makes out of the face of someone standing just outside it. Identify is what you want there.')),
+        section('How it is worked out',
+          h('p.note', 'A spot counts as seen when a camera has a clear line to the middle of a person standing there: walls, fences, hedges, sheds and cars block it, a gate’s bars and the space under a tree’s crown do not. Detail follows the pixels the camera puts on a metre there (IEC 62676-4): 25 to detect, 62.5 to observe, 125 to recognise, 250 to identify.')));
+      }
     } else if (!item) {
       head('Nothing selected');
       if (isPhone) nodes.push(h('p.note', 'Tap a room, a lamp or anything else on the plan.'));
@@ -932,10 +1035,12 @@ export async function bootEditor(root) {
             event: 'change',
           })),
         h('p.note', 'The horizontal angle from its spec sheet: about 100–110° for a 2.8 mm lens, 80–90° for 4 mm, 50–60° for 6 mm.')),
+      cameraReach(item),
       section('Where it hangs, m',
         row(bind('X', number(), { ...at(item, 'pos', 0), parse: parseNum }), bind('Z', number(), { ...at(item, 'pos', 1), parse: parseNum })),
         row(bind('Height', number(0.1), { ...prop(item, 'y', 2.5), parse: parseNum }),
-          bind('Range', number(1), { ...prop(item, 'range', 12), parse: (v) => { const n = parseNum(v); return n > 0 ? n : undefined; } }))),
+          bind('Range, m', number(1), { ...prop(item, 'range', 12), parse: (v) => { const n = parseNum(v); return n > 0 ? n : undefined; } })),
+        h('p.note', 'Range: as far as it sees at night, its infrared range on the spec sheet.')),
       section('Aim, °',
         row(bind('Turned to', number(5), { ...prop(item, 'rot', 0), parse: parseNum }),
           bind('Tilted down', number(1), { ...prop(item, 'tilt', 25), parse: parseNum })),
@@ -1020,6 +1125,18 @@ export async function bootEditor(root) {
       el?.focus();
       try { if (caret?.[0] != null) el.setSelectionRange(caret[0], caret[1]); } catch { /* not a text field */ }
     }
+  }
+
+  // How far out a camera makes out what, and how much of the plot it sees.
+  function cameraReach(item) {
+    const c = coverageNow(item.id);
+    if (!c) return null;
+    const cfg = withCameraDefaults(item);
+    const reach = levelDistances(cfg);
+    return section('What it makes out',
+      h('div.cov-legend', LEVELS.map((l, i) => [l, reach[i]]).reverse().map(([l, d]) => h('div.cov-row', h('i', { style: { background: l.color } }),
+        h('span', h('b', l.name), ` · ${LEVEL_MEANS[l.id]}`), h('em', d < cfg.range ? `to ${fix(Math.round(d * 10) / 10)} m` : `to ${cfg.range} m`)))),
+      h('p.note', `It sees ${sqm(c.stats.seen)} of the plot past what stands in the way, drawn on the plan in the same colours.`));
   }
 
   /* ---------- Smart Life ---------- */
@@ -1485,7 +1602,7 @@ export async function bootEditor(root) {
       // Something was picked (on the plan, in the list, in 3D): its details come up.
       selected(next) {
         closeModals();
-        if (next.kind === 'connections' || next.kind === 'service') setSheet('full');
+        if (next.kind === 'connections' || next.kind === 'service' || next.kind === 'coverage') setSheet('full');
         else if (next.kind !== 'home' && ui.sheet === 'closed') setSheet('peek');
       },
       // The item just added may lie outside what is shown: show everything again.

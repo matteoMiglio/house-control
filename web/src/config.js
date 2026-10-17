@@ -36,6 +36,17 @@ export const OUTDOOR_KINDS = [...OUTDOOR_LINES, 'tree', 'car', 'van', 'building'
 export const OUTDOOR_HEIGHT = { fence: 1.8, wall: 2, hedge: 1.6, gate: 1.8, tree: 5, car: 1.5, van: 2.3, building: 2.6, paving: 0 };
 // Length and width of a vehicle, in metres; it stands at `pos` and turns by `rot` like furniture.
 export const VEHICLE_SIZE = { car: [4.5, 1.85], van: [5.3, 2.05] };
+/** A tree as it is drawn (three/site.js) and as it blocks the view (coverage.js). */
+export function treeShape(o) {
+  const r = o.radius;
+  const trunk = Math.max(0.6, o.height - r * 1.6);
+  const squash = Math.min(1.25, (o.height - trunk) / (2 * r) + 0.15); // the crown's height over its width
+  return {
+    trunkHeight: trunk + r * 0.4, trunkRadius: [0.1 + r * 0.04, 0.14 + r * 0.05], // it reaches up into the crown
+    crownRadius: r, crownSquash: squash, crownBottom: o.height - 2 * r * squash,
+  };
+}
+
 export const outdoorShape = (type) => (OUTDOOR_LINES.includes(type) ? 'line' : type === 'tree' ? 'point'
   : VEHICLE_SIZE[type] ? 'vehicle' : 'rect');
 export const GROUND_KINDS = ['grass', 'gravel', 'concrete'];

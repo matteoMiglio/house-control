@@ -5,7 +5,7 @@ import { box, mat, at, floorMesh } from './kit.js';
 export const EXT_T = 0.2; // exterior wall thickness
 const INT_T = 0.1;   // interior wall thickness
 const CURB = 0.14;   // height of the cut-away walls on the camera side
-const DOOR_HEAD = 2.1; // top of a door, when the house is seen whole
+export const DOOR_HEAD = 2.1; // top of a door, when the house is seen whole
 const EPS = 1e-4;
 
 const key = (v) => Math.round(v * 1000);

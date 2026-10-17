@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { box, cyl, mat, at, shadows, rng, canvasTexture, shade, floorMesh } from './kit.js';
 import { EXT_T } from './house.js';
-import { outdoorShape, VEHICLE_SIZE } from '../config.js';
+import { outdoorShape, treeShape, VEHICLE_SIZE } from '../config.js';
 
 const MARGIN = 14;   // ground beyond everything on the plan, in metres
 const EAVE = 0.3;    // roof overhang beyond the outer face of the walls
@@ -103,14 +103,13 @@ function lineItem(o) {
 function tree(o) {
   const rand = rng(Math.round(o.pos[0] * 73 + o.pos[1] * 37));
   const g = new THREE.Group();
-  const r = o.radius;
-  const trunkH = Math.max(0.6, o.height - r * 1.6);
-  g.add(cyl(0.1 + r * 0.04, 0.14 + r * 0.05, trunkH + r * 0.4, mat('#5a4434', { rough: 1 }), 10));
+  const t = treeShape(o);
+  g.add(cyl(...t.trunkRadius, t.trunkHeight, mat('#5a4434', { rough: 1 }), 10));
   const leaves = new THREE.MeshStandardMaterial({ color: shade('#47763a', (rand() - 0.5) * 0.08), roughness: 1, flatShading: true });
-  const canopy = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), leaves);
-  canopy.scale.set(1, Math.min(1.25, (o.height - trunkH) / (2 * r) + 0.15), 1);
+  const canopy = new THREE.Mesh(new THREE.IcosahedronGeometry(t.crownRadius, 1), leaves);
+  canopy.scale.set(1, t.crownSquash, 1);
   canopy.rotation.y = rand() * Math.PI;
-  canopy.position.y = o.height - r * canopy.scale.y;
+  canopy.position.y = o.height - t.crownRadius * t.crownSquash;
   g.add(canopy);
   g.position.set(o.pos[0], 0, o.pos[1]);
   return g;

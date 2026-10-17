@@ -14,6 +14,10 @@ What changed in each release of House Control. The Mac app is on
 - **Security cameras:** drop one on the outside of a wall and it hangs there, looking away from it; drag its knob to
   aim it. Its angle of view, height, tilt, resolution and range are set in the editor, and the ground it covers is
   drawn on the plan and in 3D. Pick a camera to see the house through its lens.
+- **Camera coverage:** the ground is coloured by what the cameras make out there, past walls, fences, hedges,
+  sheds and cars, at four levels of detail (detect, observe, recognise, identify, after IEC 62676-4), with blind
+  spots on the plot in red. **Camera coverage** in the editor adds it up and rates every door and gate; each camera
+  says how far out it identifies a face.
 - The demo apartment has a garden, a drive with a van on it and three cameras to try it on.
 
 ### Mac

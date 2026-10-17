@@ -7,6 +7,7 @@ import { lightColor } from '../three/lights.js';
 import { MODE_COLORS } from '../three/ac.js';
 import { AC_SWINGS } from '../store.js';
 import { haptic, isPhone } from '../bridge.js';
+import { LEVELS, levelDistances } from '../coverage.js';
 
 const MODE_LABEL = { cool: 'Cool', heat: 'Heat', dry: 'Dry', fan: 'Fan', auto: 'Auto' };
 const FAN_LABEL = { auto: 'Auto', low: 'Low', medium: 'Medium', high: 'High', turbo: 'Turbo' };
@@ -423,13 +424,15 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
   function cameraSheet(id) {
     const cfg = config.cameras.find((c) => c.id === id);
     const fact = (label, value) => h('div.cam-fact', h('span', label), h('b', value));
+    const reach = levelDistances(cfg);
     const nodes = [
       sheetHead(cfg.name, h('div.sheet-sub', 'Security camera · ', h('b', 'View'))),
       h('div.cam-facts',
         fact('Angle of view', `${cfg.fov}°`),
-        fact('Range', `${cfg.range} m`),
-        fact('Mounted at', `${cfg.y} m`),
-        fact('Tilted down', `${cfg.tilt}°`)),
+        fact('Mounted at', `${cfg.y} m · ${cfg.tilt}° down`)),
+      // How far out it makes out a face, a known person, what someone does, or anyone at all.
+      h('div.dori', LEVELS.map((l, i) => [l, reach[i]]).reverse().map(([l, d]) => h('div.dori-row', { vars: { '--dori': l.color } },
+        h('i'), h('span', l.name), h('b', d < cfg.range ? `${d.toFixed(1)} m` : `${cfg.range} m, its range`)))),
       h('div.sheet-note', icon('cctv', 20),
         `Roughly what this camera sees: the dimmed part is outside its picture. Move or aim it in Edit Home.`),
     ];

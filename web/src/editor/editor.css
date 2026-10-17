@@ -472,3 +472,20 @@ g.p-out.car rect, g.p-out.van rect { fill: #4a6488; stroke: #dfe5f0; stroke-widt
 g.p-out.van rect { fill: #d9dde3; stroke: #8b93a7; }
 g.p-out .front { stroke: rgba(10, 14, 26, 0.75); stroke-width: 0.12; stroke-linecap: round; fill: none; pointer-events: none; }
 g.p-out.sel rect { stroke: #6aa6ff; stroke-width: 0.1; }
+
+/* ---------- camera coverage ---------- */
+
+.p-coverage { pointer-events: none; opacity: 0.95; }
+.p-way { fill: var(--way); stroke: #0a0e1a; stroke-width: 0.07; filter: drop-shadow(0 0 0.15px var(--way)); }
+.cov-total { display: flex; align-items: baseline; gap: 8px; }
+.cov-total b { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.cov-total span { font-size: 12px; color: var(--muted); }
+.cov-bar { display: flex; height: 8px; margin: 10px 0 12px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, 0.06); }
+.cov-bar i { flex-basis: 0; min-width: 0; }
+.cov-legend { display: flex; flex-direction: column; gap: 7px; }
+.cov-row { display: grid; grid-template-columns: 9px 1fr auto; gap: 9px; align-items: center; font-size: 12px; color: var(--muted); }
+.cov-row i { width: 9px; height: 9px; border-radius: 50%; }
+.cov-row b { color: var(--text); font-weight: 600; }
+.cov-row em { font-style: normal; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.cov-row.way { padding: 7px 0; border-bottom: 1px solid var(--line); }
+.cov-row.way:last-of-type { border-bottom: 0; }

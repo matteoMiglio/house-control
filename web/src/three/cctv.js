@@ -1,5 +1,5 @@
-// A security camera: a bullet camera on a bracket, and what it looks at — the edges of its
-// field of view out to its range, and the patch of ground they enclose.
+// A security camera: a bullet camera on a bracket, and the edges of its field of view out to
+// its range. What it actually sees on the ground, past what stands in the way, is coverage.js.
 import * as THREE from 'three';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
@@ -120,16 +120,6 @@ export class CameraUnit {
   buildView() {
     const { eye, ends, corners } = viewEdge(this.cfg);
     const group = new THREE.Group();
-    const shape = new THREE.Shape(ends.map((p) => new THREE.Vector2(p.x, -p.z)));
-    const geo = new THREE.ShapeGeometry(shape);
-    geo.rotateX(-Math.PI / 2);
-    const fill = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-      color: this.color, transparent: true, opacity: 0.2, depthWrite: false, toneMapped: false,
-      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-    }));
-    fill.position.y = 0.02;
-    fill.renderOrder = 2;
-
     // The outline on the ground, and the four corners of the picture back to the lens.
     const pts = [];
     ends.forEach((p, i) => {
@@ -140,10 +130,10 @@ export class CameraUnit {
     const lineGeo = new LineSegmentsGeometry();
     lineGeo.setPositions(pts);
     const lines = new LineSegments2(lineGeo, new LineMaterial({
-      color: this.color, linewidth: 1.6, transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false,
+      color: this.color, linewidth: 1.4, transparent: true, opacity: 0.7, depthWrite: false, toneMapped: false,
     }));
     lines.renderOrder = 3;
-    group.add(fill, lines);
+    group.add(lines);
     this.ground = ends.map((p) => [p.x, p.z]);
     return group;
   }

@@ -194,9 +194,21 @@ out to its `range`; pick one (in the panel, or in the editor) to see the house t
 | `tilt` | `25` | Degrees it looks down |
 | `fov` | `100` | Horizontal angle of view, from the spec sheet: about 100–110° for a 2.8 mm lens, 80–90° for 4 mm |
 | `resolution` | `[2560, 1440]` | Pixels across and down; the ratio sets the vertical angle of view |
-| `range` | `12` | How far out its view is drawn, in metres |
+| `range` | `12` | How far it sees at night, in metres: its infrared range from the spec sheet |
 
-The covered ground is drawn as if nothing stood in the way: walls, fences and trees do not block it yet.
+### Coverage
+
+From outside, the ground is coloured by how much the cameras make out there, and **Camera coverage** in the
+editor adds it up: how much of the plot is seen, at what detail, and how well each door and gate is watched.
+
+- A spot counts as seen when a camera has a clear line to the middle of a person standing there (1 m up).
+  Walls, fences, hedges, sheds and cars block it; a gate's bars and the space under a tree's crown do not.
+  Inside the house and under sheds and cars nobody stands, so those are left out.
+- Detail follows the pixels a camera puts on a metre of the scene there (IEC 62676-4, "DORI"): 25 to **detect**
+  someone, 62.5 to **observe** what they do, 125 to **recognise** someone you know, 250 to **identify** a stranger.
+  It follows from the resolution, the angle of view and the distance.
+- For a door or a gate, it is the face (1.6 m up) of someone standing just outside it that counts.
+- Ground on the plot that no camera sees is a blind spot, drawn in red.
 
 ## `scenes`
 
