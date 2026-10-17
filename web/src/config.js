@@ -1,12 +1,23 @@
 // Loads and normalises a floor plan ("home.json"). Everything the 3D scene and the UI
 // know about the apartment comes from this one document, so swapping the file swaps the home.
 
-const LIGHT_TYPES = ['ceiling', 'pendant', 'spots', 'floor', 'table', 'strip'];
+const LIGHT_TYPES = ['ceiling', 'pendant', 'spots', 'floor', 'table', 'strip', 'lantern', 'post', 'flood'];
 const WALLS = ['north', 'south', 'east', 'west'];
 
 export class ConfigError extends Error {}
 
 export const LIGHT_KINDS = LIGHT_TYPES;
+// Fixtures for outside: a wall lantern, a garden post light and a floodlight.
+export const OUTDOOR_LIGHTS = ['lantern', 'post', 'flood'];
+// Lamps hung on a wall face away from it, the way `rot` turns furniture.
+export const WALL_LIGHTS = ['lantern', 'flood'];
+
+/** A plain on/off lamp is a smart plug, unless it is plainly a light outside (a lantern, a post…). */
+export const lampIcon = (cfg) => (cfg.capabilities.length || OUTDOOR_LIGHTS.includes(cfg.type) ? cfg.type : 'plug');
+
+/** The built-in group for lamps and plugs outside the house: `"room": "outside"`. */
+export const OUTSIDE = 'outside';
+export const OUTSIDE_NAME = 'Outside';
 
 // A lamp or an AC is real when it is linked to a device of a connected platform:
 // `link: { service, id }` (Home Assistant, Philips Hue, Apple Home) or, for Smart Life,
@@ -105,6 +116,8 @@ export function normalize(raw) {
     return { id: r.id, name: r.name || r.id, x, z, w, d, floor: r.floor || 'oak' };
   });
   const roomIds = new Set(rooms.map((r) => r.id));
+  // A plan may still have a room of its own called "outside": then that room is meant.
+  const outsideIsArea = !roomIds.has(OUTSIDE);
 
   const openings = (raw.openings || []).map((o, i) => {
     need(isPoint(o.from) && isPoint(o.to), `Opening #${i + 1} needs "from" and "to" points`);
@@ -114,7 +127,8 @@ export function normalize(raw) {
 
   const lights = (raw.lights || []).map((l) => {
     unique(l.id, 'A light');
-    need(roomIds.has(l.room), `Light "${l.id}" refers to unknown room "${l.room}"`);
+    need(roomIds.has(l.room) || (outsideIsArea && l.room === OUTSIDE),
+      `Light "${l.id}" refers to unknown room "${l.room}" (or use "${OUTSIDE}" for a lamp outside the house)`);
     need(LIGHT_TYPES.includes(l.type), `Light "${l.id}" has unknown type "${l.type}" (use ${LIGHT_TYPES.join(', ')})`);
     need(isPoint(l.pos), `Light "${l.id}" needs "pos": [x, z]`);
     return {
@@ -196,6 +210,7 @@ export function normalize(raw) {
     else { take(o.rect); take([o.rect[0] + o.rect[2], o.rect[1] + o.rect[3]]); }
   }
   for (const c of cameras) take(c.pos);
+  if (outsideIsArea) for (const l of lights) if (l.room === OUTSIDE) take(l.pos);
 
   return {
     name: raw.name || 'Home',
@@ -209,6 +224,11 @@ export function normalize(raw) {
     lights,
     acs,
     scenes,
+    // What the panel lists devices by: the rooms, then the outside when a lamp is out there.
+    groups: [...rooms.map((r) => ({ id: r.id, name: r.name })),
+      ...(outsideIsArea && lights.some((l) => l.room === OUTSIDE) ? [{ id: OUTSIDE, name: OUTSIDE_NAME, outside: true }] : [])],
+    // Whether "outside" means the built-in group (and not a room someone called that).
+    outsideArea: outsideIsArea,
     roof: raw.roof !== false,
     site,
     outdoor,

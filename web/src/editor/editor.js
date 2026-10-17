@@ -5,7 +5,7 @@
 import './editor.css';
 import {
   normalize, loadRawConfig, LIGHT_KINDS, FLOOR_KINDS, isLinked, OUTDOOR_KINDS, OUTDOOR_HEIGHT, GROUND_KINDS, outdoorShape,
-  withCameraDefaults, VEHICLE_SIZE,
+  withCameraDefaults, VEHICLE_SIZE, OUTSIDE, OUTSIDE_NAME, OUTDOOR_LIGHTS, WALL_LIGHTS,
 } from '../config.js';
 import { createWorld } from '../three/world.js';
 import { wallSegments, EXT_T } from '../three/house.js';
@@ -37,6 +37,7 @@ const RESOLUTIONS = [['1920x1080', '1080p · 2 MP'], ['2560x1440', '2K · 4 MP']
 // Plan handles: dragging one reshapes or aims the selected item instead of moving it.
 const HANDLES = new Set(['resize', 'corner', 'end', 'oresize', 'aim']);
 const AIM_REACH = 1; // metres from a camera to the knob that aims it
+const FIXTURE_LABEL = { lantern: 'wall lantern', post: 'garden post', flood: 'floodlight' };
 const LEVEL_MEANS = { detect: 'that someone is there', observe: 'what someone is doing', recognise: 'someone you know', identify: 'a stranger’s face' };
 const sqm = (v) => `${Math.round(v)} m²`;
 const FLOOR_FILL = { oak: '#4a3d2e', walnut: '#3c2f28', tile: '#39424b', stone: '#30353c' };
@@ -309,7 +310,11 @@ export async function bootEditor(root) {
     return [item.name || item.id, `${Object.keys(item.lights || {}).length} rules`];
   }
 
-  const roomName = (id) => doc.rooms.find((r) => r.id === id)?.name || id || '';
+  const roomName = (id) => doc.rooms.find((r) => r.id === id)?.name || (id === OUTSIDE ? OUTSIDE_NAME : id) || '';
+  // Where a lamp can be: a room, or outside (unless a room has taken that id).
+  const lampPlaces = () => [...doc.rooms.map((r) => [r.id, r.name || r.id]),
+    ...(doc.rooms.some((r) => r.id === OUTSIDE) ? [] : [[OUTSIDE, OUTSIDE_NAME]])];
+  const outsideKinds = ['outdoor', 'site', 'camera', 'coverage'];
   const roomAt = ([x, z]) => doc.rooms.find((r) => x >= r.rect[0] && x <= r.rect[0] + r.rect[2] && z >= r.rect[1] && z <= r.rect[1] + r.rect[3]);
 
   function renderSidebar() {
@@ -352,7 +357,8 @@ export async function bootEditor(root) {
     for (let i = 2; ; i++) if (!ids.has(`${base}${i}`)) return `${base}${i}`;
   }
 
-  function add(kind) {
+  function add(kind, { outside = kind === 'light' && outsideKinds.includes(sel.kind) } = {}) {
+    if (kind === 'light' && outside) { addOutdoorLight(); return; }
     snapshot();
     const room = (sel.kind === 'room' && doc.rooms[sel.index]) || doc.rooms.find((r) => r.id === doc[KEYS[sel.kind]]?.[sel.index]?.room) || doc.rooms[0];
     const center = room ? [fix(room.rect[0] + room.rect[2] / 2), fix(room.rect[1] + room.rect[3] / 2)] : [1, 1];
@@ -387,6 +393,15 @@ export async function bootEditor(root) {
       list.push({ id: uniqueId('scene'), name: 'New scene', icon: 'sparkles', lights: { '*': { on: false } } });
     }
     sel = { kind, index: list.length - 1 };
+    touch();
+  }
+
+  // A garden post light, just off the middle of the house's south side.
+  function addOutdoorLight() {
+    snapshot();
+    const b = bounds({ house: true });
+    doc.lights.push({ id: uniqueId('outside.light'), name: 'Garden light', room: OUTSIDE, type: 'post', pos: [fix(round((b.minX + b.maxX) / 2)), fix(b.maxZ + 1.5)], capabilities: [] });
+    sel = { kind: 'light', index: doc.lights.length - 1 };
     touch();
   }
 
@@ -612,6 +627,8 @@ export async function bootEditor(root) {
         g.append(sv('rect', { x: -len / 2, y: -0.07, width: len, height: 0.14, rx: 0.07 }));
       } else {
         g.append(sv('circle', { r: 0.34, class: 'halo' }), sv('circle', { r: l.type === 'table' ? 0.13 : 0.19 }));
+        // which way a wall lantern or floodlight faces
+        if (WALL_LIGHTS.includes(l.type)) g.append(sv('path', { d: 'M0 0.22V0.5', class: 'aim' }));
       }
       kids.push(g);
     });
@@ -687,11 +704,12 @@ export async function bootEditor(root) {
     ac.pos = wall === 'north' ? [cx, rz] : wall === 'south' ? [cx, fix(rz + rd)] : wall === 'west' ? [rx, cz] : [fix(rx + rw), cz];
   }
 
-  // A camera dropped close to the outside of an outer wall hangs on it, looking away from it.
-  // Returns whether it snapped; anywhere else it stands where it was dropped (on a pole, say).
-  function snapCamera(cam, [x, z]) {
+  // A camera (or a wall lantern, a floodlight) dropped close to the outside of an outer wall hangs
+  // on it, facing away from it. Returns whether it snapped; anywhere else it stands where it was
+  // dropped (a camera on a pole, say). `gap`: from the wall's outer face to the item's position.
+  function snapCamera(cam, [x, z], gap = 0.08) {
     const rooms = doc.rooms.map((r) => ({ x: r.rect[0], z: r.rect[1], w: r.rect[2], d: r.rect[3] }));
-    const face = EXT_T / 2 + 0.08;
+    const face = EXT_T / 2 + gap;
     let best = null;
     for (const s of wallSegments({ rooms, openings: [] })) {
       if (s.kind !== 'exterior') continue;
@@ -824,8 +842,11 @@ export async function bootEditor(root) {
     } else {
       item.pos = [fix(drag.pos[0] + dx), fix(drag.pos[1] + dz)];
       if (drag.kind === 'light') {
+        // Out of every room it is outside; a wall lantern or floodlight there hangs on the nearest outer wall.
+        if (WALL_LIGHTS.includes(item.type)) snapCamera(item, item.pos, 0.01);
         const room = roomAt(item.pos);
         if (room) item.room = room.id;
+        else if (!doc.rooms.some((r) => r.id === OUTSIDE)) item.room = OUTSIDE;
       }
     }
     touch();
@@ -993,8 +1014,9 @@ export async function bootEditor(root) {
       });
       nodes.push(section('Light',
         bind('Name', text(), prop(item, 'name', '')),
-        row(bind('Room', choice(doc.rooms.map((r) => [r.id, r.name || r.id])), { ...prop(item, 'room'), event: 'change' }),
-          bind('Fixture', choice(LIGHT_KINDS), { ...prop(item, 'type'), event: 'change' }))),
+        row(bind('Room', choice(lampPlaces()), { ...prop(item, 'room'), event: 'change' }),
+          bind('Fixture', choice(LIGHT_KINDS.map((k) => [k, FIXTURE_LABEL[k] || k])), { ...prop(item, 'type'), event: 'change' })),
+        item.room === OUTSIDE ? h('p.note', `It is in the ${OUTSIDE_NAME} group of the panel. ${OUTDOOR_LIGHTS.map((k) => FIXTURE_LABEL[k]).join(', ')} are made for outside; a wall lantern or floodlight dropped by an outer wall hangs on it.`) : null),
       section('Position, m',
         row(bind('X', number(), { ...at(item, 'pos', 0), parse: parseNum }), bind('Z', number(), { ...at(item, 'pos', 1), parse: parseNum })),
         row(bind('Height (auto if empty)', number(), { ...optional(item, 'y'), parse: optNum }),
@@ -1385,12 +1407,15 @@ export async function bootEditor(root) {
       ['room', 'home', 'Room'], ['light', 'bulb', 'Lamp'], ['ac', 'ac', 'Air conditioner'],
       ['opening', 'opening', 'Door or window'], ['furniture', 'furniture', 'Furniture'], ['scene', 'sparkles', 'Scene'],
       ['camera', 'cctv', 'Security camera'], ['outdoor', 'trees', 'Fence, tree…'], ['site', 'fence', 'Property line'],
+      ['outdoorLight', 'lantern', 'Outdoor light'],
     ];
     addSheet.append(h('div.p-modal-head', h('b', 'Add to the plan'), h('button.p-text', { onclick: closeModals }, 'Cancel')),
       h('div.p-add-grid', addables.map(([kind, name, label]) => h('button.p-add-item', {
         onclick: () => {
           closeModals();
-          if (kind === 'site') { if (doc.site?.boundary) select({ kind: 'site' }); else addBoundary(); setSheet('peek'); } else add(kind);
+          if (kind === 'site') { if (doc.site?.boundary) select({ kind: 'site' }); else addBoundary(); setSheet('peek'); }
+          else if (kind === 'outdoorLight') add('light', { outside: true });
+          else add(kind);
           haptic('light');
           ui.reveal();
         },

@@ -489,3 +489,4 @@ g.p-out.sel rect { stroke: #6aa6ff; stroke-width: 0.1; }
 .cov-row em { font-style: normal; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
 .cov-row.way { padding: 7px 0; border-bottom: 1px solid var(--line); }
 .cov-row.way:last-of-type { border-bottom: 0; }
+.p-light .aim { stroke: #ffb46b; stroke-width: 0.07; stroke-linecap: round; fill: none; pointer-events: none; }

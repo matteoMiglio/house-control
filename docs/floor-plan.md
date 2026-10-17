@@ -122,8 +122,8 @@ Decoration only. Every piece has `type`, `pos` (`[x, z]` of its centre) and an o
 | --- | --- |
 | `id` | Unique |
 | `name` | Shown on the tile |
-| `room` | The `id` of its room |
-| `type` | `ceiling`, `pendant`, `spots`, `floor`, `table` or `strip` |
+| `room` | The `id` of its room, or `outside` for a lamp outside the house: those make up the panel's **Outside** group |
+| `type` | `ceiling`, `pendant`, `spots`, `floor`, `table` or `strip`; outside, `lantern` (on a wall), `post` (a garden post light) or `flood` (a floodlight on a wall). A lantern or floodlight faces the way `rot` turns it, like furniture |
 | `pos` | `[x, z]` |
 | `y` | Height, if the default for the type does not fit |
 | `rot` | Rotation, for strips and spots |

@@ -8,6 +8,7 @@ import { MODE_COLORS } from '../three/ac.js';
 import { AC_SWINGS } from '../store.js';
 import { haptic, isPhone } from '../bridge.js';
 import { LEVELS, levelDistances } from '../coverage.js';
+import { lampIcon } from '../config.js';
 
 const MODE_LABEL = { cool: 'Cool', heat: 'Heat', dry: 'Dry', fan: 'Fan', auto: 'Auto' };
 const FAN_LABEL = { auto: 'Auto', low: 'Low', medium: 'Medium', high: 'High', turbo: 'Turbo' };
@@ -36,7 +37,9 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
   const { state } = store;
   const ui = { room: 'all', sheet: null };
   let world = null;
-  const roomName = new Map(config.rooms.map((r) => [r.id, r.name]));
+  // Devices are listed by room, and the outside as one more group (config.groups).
+  const roomName = new Map(config.groups.map((r) => [r.id, r.name]));
+  let autoOutside = false; // the view went outside because the Outside group was picked
 
   /* ---------- skeleton ---------- */
 
@@ -90,7 +93,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
   /* ---------- rooms ---------- */
 
   const roomButtons = new Map();
-  for (const r of [{ id: 'all', name: 'All' }, ...config.rooms]) {
+  for (const r of [{ id: 'all', name: 'All' }, ...config.groups]) {
     const count = h('span.count.zero', '0');
     const b = h('button.room', { onclick: () => { haptic('tick'); selectRoom(r.id); } }, r.name, count);
     roomButtons.set(r.id, { b, count });
@@ -99,6 +102,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
 
   function setOutside(on) {
     haptic('light');
+    autoOutside = false;
     world?.setOutside(on);
     showView(on);
   }
@@ -110,13 +114,21 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     viewBtn.classList.toggle('active', on);
   }
 
+  // What the 3D view frames for a group: a room, or the whole model (the outside is all of it).
+  const isOutside = (id) => Boolean(config.groups.find((g) => g.id === id)?.outside);
+  const focusOf = (id) => (id === 'all' || isOutside(id) || !config.rooms.some((r) => r.id === id) ? null : { kind: 'room', id });
+
   function selectRoom(id) {
     if (ui.room === id) id = 'all';
     ui.room = id;
     layoutTiles();
     update();
     roomButtons.get(id).b.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-    onFocus(id === 'all' ? null : { kind: 'room', id });
+    // The Outside group is seen from outside; leaving it goes back in, unless outside was chosen by hand.
+    if (isOutside(id) && world && !world.outside) { autoOutside = true; world.setOutside(true); showView(true); }
+    else if (!isOutside(id) && autoOutside) { autoOutside = false; world?.setOutside(false); showView(false); }
+    world?.setCoverageShown(!isOutside(id));
+    onFocus(focusOf(id));
   }
 
   function inScope(cfg) {
@@ -153,7 +165,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
       ? h('button.tile-more', { 'aria-label': `${cfg.name} settings`, onclick: (e) => { e.stopPropagation(); openSheet({ kind: 'light', id: cfg.id }); } }, icon('sliders', 15))
       : null;
     const el = h(`div.tile${dimmable ? '.dimmable' : ''}`, { role: 'button', tabindex: 0, 'aria-label': cfg.name },
-      h('div.bubble', icon(cfg.capabilities.length ? cfg.type : 'plug', 19)),
+      h('div.bubble', icon(lampIcon(cfg), 19)),
       h('div.tile-text', h('div.tile-name', cfg.name), sub),
       more,
       h('div.tile-level'));
@@ -265,7 +277,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     const nodes = [];
     let i = 0;
     const add = (t) => { t.el.style.setProperty('--i', i++); nodes.push(t.el); };
-    for (const room of config.rooms) {
+    for (const room of config.groups) {
       if (ui.room !== 'all' && room.id !== ui.room) continue;
       const devices = [...tiles.values()].filter((t) => t.cfg.room === room.id);
       if (!devices.length) continue;
@@ -295,7 +307,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     sheet.inert = false;
     card.classList.add('detail');
     hideTooltip();
-    onFocus(target.kind === 'light' ? { kind: 'room', id: store.lightCfg.get(target.id).room } : target);
+    onFocus(target.kind === 'light' ? focusOf(store.lightCfg.get(target.id).room) : target);
     update();
   }
 
@@ -308,7 +320,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     panel.inert = false;
     sheet.inert = true;
     card.classList.remove('detail');
-    onFocus(ui.room === 'all' ? null : { kind: 'room', id: ui.room });
+    onFocus(focusOf(ui.room));
     update();
     return true;
   }

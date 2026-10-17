@@ -18,7 +18,13 @@ What changed in each release of House Control. The Mac app is on
   sheds and cars, at four levels of detail (detect, observe, recognise, identify, after IEC 62676-4), with blind
   spots on the plot in red. **Camera coverage** in the editor adds it up and rates every door and gate; each camera
   says how far out it identifies a face.
-- The demo apartment has a garden, a drive with a van on it and three cameras to try it on.
+- **Outside lamps:** an **Outside** group in the panel next to the rooms, for lamps and plugs outside the house;
+  picking it shows the house from outside. New fixtures for there: a wall lantern, a garden post light and a
+  floodlight. In the editor a lamp dragged out of the house joins the group, and a lantern or floodlight dropped by
+  an outer wall hangs on it.
+  On the iPhone, Devices lists them under Outside, and **Add devices** can put lamps there.
+- The outside view is now early evening, so lamps outside show.
+- The demo apartment has a garden, a drive with a van on it, three cameras and four lamps outside to try it on.
 
 ### Mac
 

@@ -125,6 +125,57 @@ const fixtures = {
     };
   },
 
+  // Outside: a lantern on a wall, facing +z away from it.
+  lantern(cfg) {
+    const y = cfg.y ?? 2;
+    const dark = mat(DARK, { rough: 0.5, metal: 0.4 });
+    return {
+      parts: [
+        at(box(0.1, 0.16, 0.02, dark, { r: 0.006 }), 0, y - 0.02, 0.01),
+        at(box(0.02, 0.02, 0.1, dark, { r: 0 }), 0, y + 0.1, 0.06),
+        at(box(0.16, 0.025, 0.16, dark, { r: 0.006 }), 0, y + 0.12, 0.13),
+      ],
+      glow: [at(box(0.12, 0.2, 0.12, glowMaterial(), { r: 0.01 }), 0, y - 0.08, 0.13)],
+      lights: [point(cfg.intensity ?? 2.4, y, { distance: 7, z: 0.32 })],
+      hit: [0.4, 0.5, 0.45, y],
+    };
+  },
+
+  // A garden post light, knee high.
+  post(cfg) {
+    const top = cfg.y ?? 0.9;
+    const dark = mat(DARK, { rough: 0.5, metal: 0.4 });
+    return {
+      parts: [at(cyl(0.06, 0.07, top - 0.18, dark, 16), 0, 0, 0), at(cyl(0.085, 0.085, 0.03, dark, 20), 0, top - 0.03, 0)],
+      glow: [at(cyl(0.065, 0.065, 0.15, glowMaterial(), 20), 0, top - 0.18, 0)],
+      lights: [point(cfg.intensity ?? 3.2, top - 0.1, { distance: 6 })],
+      hit: [0.4, top + 0.1, 0.4, top / 2],
+    };
+  },
+
+  // A floodlight on a wall, tilted down over the ground in front of it.
+  flood(cfg, H) {
+    const y = cfg.y ?? Math.min(H - 0.15, 2.6);
+    const dark = mat(DARK, { rough: 0.5, metal: 0.4 });
+    const housing = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.17, 0.06), dark);
+    housing.position.set(0, y, 0.12);
+    housing.rotation.x = 0.6;
+    const face = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.13, 0.012), glowMaterial());
+    face.position.set(0, y - 0.02, 0.15);
+    face.rotation.x = 0.6;
+    const beam = spot(cfg.intensity ?? 60, y - 0.04);
+    beam.position.z = 0.17;
+    beam.target.position.set(0, 0, 4);
+    beam.angle = 0.9;
+    beam.shadow.camera.far = 20;
+    return {
+      parts: [at(box(0.04, 0.04, 0.1, dark, { r: 0 }), 0, y - 0.02, 0.04), housing],
+      glow: [face],
+      lights: [beam],
+      hit: [0.45, 0.4, 0.45, y],
+    };
+  },
+
   strip(cfg) {
     const y = cfg.y ?? 1;
     const length = cfg.length ?? 1;

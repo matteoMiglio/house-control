@@ -40,11 +40,18 @@ public struct PlanEditor {
 
     public var name: String { plan["name"] as? String ?? "Home" }
 
+    /// The built-in place for lamps outside the house (`"room": "outside"`, as in web/src/config.js),
+    /// unless the plan has a room of its own with that id.
+    public static let outside = "outside"
+
+    /// The rooms, then Outside: where devices are listed and can be added.
     public var rooms: [Room] {
-        (plan["rooms"] as? [[String: Any]] ?? []).compactMap { room in
+        var list: [Room] = (plan["rooms"] as? [[String: Any]] ?? []).compactMap { room in
             guard let id = room["id"] as? String else { return nil }
             return Room(id: id, name: (room["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? id)
         }
+        if !list.contains(where: { $0.id == Self.outside }) { list.append(Room(id: Self.outside, name: "Outside")) }
+        return list
     }
 
     public var items: [Item] {
@@ -174,6 +181,30 @@ public struct PlanEditor {
         return "\(base)\(i)"
     }
 
+    /// Lamps added outside become garden post lights in a row just south of the house; an air
+    /// conditioner has no place outside, so it is left out.
+    private mutating func addOutside(_ devices: [[String: Any]]) -> [String] {
+        let rects = (plan["rooms"] as? [[String: Any]] ?? []).compactMap { ($0["rect"] as? [NSNumber])?.map(\.doubleValue) }.filter { $0.count == 4 }
+        let minX = rects.map { $0[0] }.min() ?? 0
+        let maxZ = rects.map { $0[1] + $0[3] }.max() ?? 0
+        var taken = allIds
+        var lights = plan["lights"] as? [[String: Any]] ?? []
+        let existing = lights.filter { $0["room"] as? String == Self.outside }.count
+        var added: [String] = []
+        let newLights = devices.filter { ($0["kind"] as? String) == "light" }
+        for (n, device) in newLights.enumerated() {
+            let id = uniqueId("outside.light", taken: taken)
+            taken.insert(id)
+            lights.append(["id": id, "name": device["name"] as? String ?? "Light", "room": Self.outside, "type": "post",
+                           "pos": [Self.fix(minX + 1 + Double(existing + n) * 1.5), Self.fix(maxZ + 1.5)],
+                           "capabilities": device["capabilities"] as? [String] ?? []])
+            added.append(id)
+        }
+        plan["lights"] = lights
+        for (id, device) in zip(added, newLights) { link(id, to: device) }
+        return added
+    }
+
     private func rect(of room: String) -> [Double]? {
         guard let entry = (plan["rooms"] as? [[String: Any]] ?? []).first(where: { $0["id"] as? String == room }),
               let rect = entry["rect"] as? [NSNumber], rect.count == 4 else { return nil }
@@ -198,6 +229,7 @@ public struct PlanEditor {
     /// Returns the ids of the new items.
     @discardableResult
     public mutating func add(_ devices: [[String: Any]], to room: String) -> [String] {
+        if room == Self.outside && rect(of: room) == nil { return addOutside(devices) }
         guard let r = rect(of: room) else { return [] }
         let (x, z, w, d) = (r[0], r[1], r[2], r[3])
         var taken = allIds

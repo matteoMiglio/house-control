@@ -139,6 +139,7 @@ There is no Dock icon and no main window: look for the house in the menu bar.
 | Click an AC, or its tile | Open its sheet: temperature, mode, fan speed |
 | Click a room | Zoom in on it and list only its devices |
 | Click the trees button (on the iPhone, in the corner of the 3D view) | See the house from outside, with its cameras; click it again to go back inside |
+| Click **Outside** among the rooms | Lamps outside the house, seen from outside |
 | Click a security camera, outside | See through it |
 | Drag the 3D view / scroll over it | Rotate / zoom |
 | `Esc` | Back, then close |

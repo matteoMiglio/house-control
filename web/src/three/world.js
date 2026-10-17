@@ -9,6 +9,7 @@ import { buildHouse } from './house.js';
 import { buildSite } from './site.js';
 import { CameraUnit, cameraColor, cameraQuaternion, halfAngles } from './cctv.js';
 import { coverage, coverageCanvas } from '../coverage.js';
+import { OUTSIDE } from '../config.js';
 import { buildFurniture } from './furniture.js';
 import { LightUnit } from './lights.js';
 import { ACUnit } from './ac.js';
@@ -83,6 +84,7 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
   let site = null;
   // What the cameras see, drawn on the ground outside: all of them (null) or one camera's id.
   let coverageOf = null;
+  let coverageShown = true;
   let coverageMesh = null;
   const coverageMaps = new Map();
   scene.add(buildFurniture(config.furniture));
@@ -105,6 +107,7 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     cameras.set(cfg.id, unit);
     scene.add(unit.group, unit.view);
   });
+  const outdoorLights = config.outsideArea ? [...lights.values()].filter((u) => u.cfg.room === OUTSIDE) : [];
   // Cut open, the model has no ground around it: only cameras on the house itself are shown.
   const onHouse = (cfg) => cfg.pos[0] > minX - 0.4 && cfg.pos[0] < maxX + 0.4 && cfg.pos[1] > minZ - 0.4 && cfg.pos[1] < maxZ + 0.4;
   let hitTargets = [];
@@ -129,12 +132,13 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
   moon.shadow.radius = 4;
   night.add(moon, moon.target);
 
-  // Outside it is day: a soft sky and a low sun, so façades and the garden read clearly.
+  // Outside it is early evening: light enough to read the façades and the garden, dark enough
+  // for the lamps outside to show.
   const day = new THREE.Group();
   day.visible = false;
   scene.add(day);
-  day.add(new THREE.HemisphereLight(0xd6e4ff, 0x3a4630, 1.15));
-  const sun = new THREE.DirectionalLight(0xfff0dc, 2.1);
+  day.add(new THREE.HemisphereLight(0xc4d2f0, 0x2e3828, 0.75));
+  const sun = new THREE.DirectionalLight(0xffd9b0, 1.25);
   sun.position.copy(siteCenter).add(new THREE.Vector3(siteSpan * 0.45, siteSpan * 0.7 + 8, siteSpan * 0.3));
   sun.target.position.copy(siteCenter);
   sun.castShadow = true;
@@ -210,8 +214,8 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     const f = rig.focus;
     let box;
     let fill = 0.96;
-    if (f?.kind === 'room') {
-      const r = config.rooms.find((x) => x.id === f.id);
+    const r = f?.kind === 'room' && config.rooms.find((x) => x.id === f.id);
+    if (r) {
       box = new THREE.Box3(new THREE.Vector3(r.x, 0, r.z), new THREE.Vector3(r.x + r.w, H * 0.75, r.z + r.d));
       fill = 0.84;
     } else if (f?.kind === 'ac') {
@@ -275,15 +279,18 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     shadowFrames = 3;
   }
 
+  // Cameras and lamps outside the house only show when the ground around it does (or they hang on it).
   function showCameras() {
     for (const unit of cameras.values()) {
       unit.group.visible = unit.id !== pov && (outside || onHouse(unit.cfg));
       unit.view.visible = outside && !pov;
     }
+    for (const unit of outdoorLights) unit.group.visible = house.whole || onHouse(unit.cfg);
     drawCoverage();
     // Under the roof the rooms and their devices cannot be seen, so they cannot be picked either.
-    const indoors = house.whole && config.roof ? [] : [...[...lights.values()].map((u) => u.hit), ...[...acs.values()].map((u) => u.hit), ...house.floors];
-    hitTargets = [...[...cameras.values()].filter((u) => u.group.visible).map((u) => u.hit), ...indoors];
+    const indoors = house.whole && config.roof ? []
+      : [...[...lights.values()].filter((u) => !outdoorLights.includes(u)).map((u) => u.hit), ...[...acs.values()].map((u) => u.hit), ...house.floors];
+    hitTargets = [...[...cameras.values(), ...outdoorLights].filter((u) => u.group.visible).map((u) => u.hit), ...indoors];
   }
 
   function drawCoverage() {
@@ -294,7 +301,7 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
       coverageMesh.material.dispose();
       coverageMesh = null;
     }
-    if (!outside || pov || !config.cameras.length) return;
+    if (!outside || pov || !coverageShown || !config.cameras.length) return;
     const key = coverageOf ?? '*';
     if (!coverageMaps.has(key)) {
       coverageMaps.set(key, coverage(config, { cameras: coverageOf ? config.cameras.filter((c) => c.id === coverageOf) : config.cameras }));
@@ -561,6 +568,13 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     get pov() { return pov; },
     /** Shows the picture of a security camera, or (null) the model again. */
     lookThrough: setPov,
+    /** Whether the coverage is drawn at all: not while the lamps outside are what is being looked at. */
+    setCoverageShown(on) {
+      if (on === coverageShown) return;
+      coverageShown = on;
+      drawCoverage();
+      wake();
+    },
     /** Draws on the ground what all the cameras (null) or one of them can see, outside. */
     showCoverage(id = null) {
       const next = id && cameras.has(id) ? id : null;

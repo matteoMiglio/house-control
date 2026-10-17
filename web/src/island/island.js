@@ -3,7 +3,7 @@
 // with scenes and devices; when something changes elsewhere it peeks out to say so.
 import './island.css';
 import * as THREE from 'three';
-import { loadConfig } from '../config.js';
+import { loadConfig, lampIcon } from '../config.js';
 import { createStore } from '../store.js';
 import { createWorld } from '../three/world.js';
 import { h, clamp } from '../ui/dom.js';
@@ -38,7 +38,7 @@ export async function bootIsland(root) {
   }
   const store = createStore(config);
   const { state } = store;
-  const roomName = new Map(config.rooms.map((r) => [r.id, r.name]));
+  const roomName = new Map(config.groups.map((r) => [r.id, r.name]));
 
   /* ---------- skeleton ---------- */
 
@@ -103,7 +103,7 @@ export async function bootIsland(root) {
     const dimmable = cfg.capabilities.includes('brightness');
     const sub = h('div.chip-sub');
     const el = h(`div.chip.light${dimmable ? '.dimmable' : ''}`, { role: 'button', 'aria-label': cfg.name },
-      h('span.chip-bubble', icon(cfg.capabilities.length ? cfg.type : 'plug', 15)),
+      h('span.chip-bubble', icon(lampIcon(cfg), 15)),
       h('div.chip-text', h('div.chip-name', cfg.name), sub),
       h('i.chip-level'));
     // Click toggles, dragging sideways dims: the same gesture as the panel's tiles.

@@ -20,7 +20,7 @@ const fail = (msg) => { throw new ToolError(msg); };
 
 export function createAgent({ store, config, raw, render, onAction }) {
   const { state } = store;
-  const roomName = new Map(config.rooms.map((r) => [r.id, r.name]));
+  const roomName = new Map(config.groups.map((r) => [r.id, r.name]));
 
   /* ---------- describing the home ---------- */
 
@@ -66,7 +66,7 @@ export function createAgent({ store, config, raw, render, onAction }) {
       `Home "${config.name}": ${config.rooms.length} rooms, ${config.lights.length} lights (${lightsOn} on), `
       + `${config.acs.length} air conditioners (${acsOn} running).${scene ? ` Active scene: ${scene.name}.` : ''}`,
     ];
-    for (const room of config.rooms) {
+    for (const room of config.groups) {
       const lights = config.lights.filter((l) => l.room === room.id);
       const acs = config.acs.filter((a) => a.room === room.id);
       if (!lights.length && !acs.length) { lines.push('', `${room.name} [${room.id}] — no devices`); continue; }
@@ -84,8 +84,9 @@ export function createAgent({ store, config, raw, render, onAction }) {
     return {
       home: config.name,
       scene: state.scene,
-      rooms: config.rooms.map((r) => ({
-        id: r.id, name: r.name,
+      // The rooms, and the outside as one more when lamps are out there.
+      rooms: config.groups.map((r) => ({
+        id: r.id, name: r.name, ...(r.outside ? { outside: true } : {}),
         lights: config.lights.filter((l) => l.room === r.id).map(lightJSON),
         acs: config.acs.filter((a) => a.room === r.id).map(acJSON),
       })),
@@ -108,7 +109,7 @@ export function createAgent({ store, config, raw, render, onAction }) {
       if (key === 'all' || key === '*' || key === 'everything') { for (const d of list) out.add(d); continue; }
       const byId = list.find((d) => d.id === t);
       if (byId) { out.add(byId); continue; }
-      const room = config.rooms.find((r) => r.id === t || norm(r.name) === key);
+      const room = config.groups.find((r) => r.id === t || norm(r.name) === key);
       if (room) {
         const inRoom = list.filter((d) => d.room === room.id);
         if (!inRoom.length) fail(`${room.name} has no ${what}.`);
@@ -597,7 +598,7 @@ export function createAgent({ store, config, raw, render, onAction }) {
       if (config.acs.length) L.push(`- Every air conditioner off: ${base}/do/all/acs/off`);
       L.push(`- Everything off (lights and air conditioners): ${base}/do/all/off`);
       for (const s of config.scenes) L.push(`- Scene "${s.name}": ${base}/do/scene/${encodeURIComponent(s.id)}`);
-      for (const room of config.rooms) {
+      for (const room of config.groups) {
         const lights = config.lights.filter((l) => l.room === room.id);
         const acs = config.acs.filter((a) => a.room === room.id);
         if (!lights.length && !acs.length) continue;
