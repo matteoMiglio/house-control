@@ -3,8 +3,13 @@
 // real devices. On a phone the same pieces are laid out for a finger: the plan fills the
 // screen, the inspector is a sheet from the bottom, pinch zooms and drag pans.
 import './editor.css';
-import { normalize, loadRawConfig, LIGHT_KINDS, FLOOR_KINDS, isLinked } from '../config.js';
+import {
+  normalize, loadRawConfig, LIGHT_KINDS, FLOOR_KINDS, isLinked, OUTDOOR_KINDS, OUTDOOR_HEIGHT, GROUND_KINDS, outdoorShape,
+  withCameraDefaults, VEHICLE_SIZE,
+} from '../config.js';
 import { createWorld } from '../three/world.js';
+import { wallSegments, EXT_T } from '../three/house.js';
+import { viewEdge, cameraColor } from '../three/cctv.js';
 import { FURNITURE_TYPES, footprint } from '../three/furniture.js';
 import { h, clamp } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
@@ -19,8 +24,18 @@ const sv = (tag, attrs = {}, ...kids) => {
   return el;
 };
 
-const KEYS = { room: 'rooms', light: 'lights', ac: 'acs', furniture: 'furniture', opening: 'openings', scene: 'scenes' };
-const TITLES = { room: 'Rooms', light: 'Lights', ac: 'Air conditioners', furniture: 'Furniture', opening: 'Doors & windows', scene: 'Scenes' };
+const KEYS = {
+  room: 'rooms', light: 'lights', ac: 'acs', camera: 'cameras', furniture: 'furniture', opening: 'openings', outdoor: 'outdoor', scene: 'scenes',
+};
+const TITLES = {
+  room: 'Rooms', light: 'Lights', ac: 'Air conditioners', camera: 'Security cameras', furniture: 'Furniture',
+  opening: 'Doors & windows', outdoor: 'Outside', scene: 'Scenes',
+};
+const OUTDOOR_LABEL = { fence: 'Fence', wall: 'Garden wall', hedge: 'Hedge', gate: 'Gate', tree: 'Tree', car: 'Car', van: 'Van', building: 'Shed or garage', paving: 'Paving' };
+const RESOLUTIONS = [['1920x1080', '1080p · 2 MP'], ['2560x1440', '2K · 4 MP'], ['2688x1520', '4 MP (2688 × 1520)'], ['2592x1944', '5 MP · 4:3'], ['3840x2160', '4K · 8 MP']];
+// Plan handles: dragging one reshapes or aims the selected item instead of moving it.
+const HANDLES = new Set(['resize', 'corner', 'end', 'oresize', 'aim']);
+const AIM_REACH = 1; // metres from a camera to the knob that aims it
 const FLOOR_FILL = { oak: '#4a3d2e', walnut: '#3c2f28', tile: '#39424b', stone: '#30353c' };
 const WALLS = ['north', 'east', 'south', 'west'];
 const SCENE_ICONS = ['sun', 'sofa', 'film', 'moon', 'door', 'table', 'bed', 'tv', 'sparkles'];
@@ -46,6 +61,8 @@ export async function bootEditor(root) {
   let world = null;
   let phone = null; // the iPhone's layout and gestures, set up by buildPhoneLayout()
   let previewLights = true;
+  let previewOutside = false;
+  let previewPov = true; // a selected camera is previewed through its own lens
   const undo = [];
   const redo = [];
   const tuya = {
@@ -83,6 +100,9 @@ export async function bootEditor(root) {
   const inspector = h('div.inspector');
   const previewHost = h('div.preview');
   const previewToggle = h('button.chip', { onclick: () => { previewLights = !previewLights; schedulePreview(0); } });
+  const viewChip = h('button.chip', { onclick: () => { previewOutside = !previewOutside; previewPov = false; syncPreview(); } });
+  const povChip = h('button.chip', { onclick: () => { previewPov = !previewPov; syncPreview(); } });
+  const chips = h('div.chips', povChip, viewChip, previewToggle);
 
   if (isPhone) buildPhoneLayout();
   else root.replaceChildren(h('div.editor',
@@ -96,7 +116,7 @@ export async function bootEditor(root) {
         saveBtn)),
     sidebar,
     h('main.canvas', plan, hint),
-    h('aside.right', h('div.preview-wrap', previewHost, previewToggle), inspector),
+    h('aside.right', h('div.preview-wrap', previewHost, chips), inspector),
     h('footer.foot', status),
     toastEl));
 
@@ -131,11 +151,16 @@ export async function bootEditor(root) {
   }
 
   function select(next) {
+    const before = sel.kind;
     sel = next;
     lastSnapshotKey = null;
+    // Cameras and what is outside are best seen from outside; a camera through its own lens.
+    if (['camera', 'outdoor', 'site'].includes(next.kind) && before !== next.kind) previewOutside = true;
+    if (next.kind === 'camera' && before !== 'camera') previewPov = true;
     renderSidebar();
     renderPlan();
     renderInspector();
+    syncPreview();
     if (isPhone) phone.selected(next);
   }
 
@@ -155,6 +180,7 @@ export async function bootEditor(root) {
       const linked = [...doc.lights, ...doc.acs].filter(isLinked).length;
       status.className = 'status';
       status.replaceChildren(h('span.ok', '●'), ` ${doc.rooms.length} rooms · ${doc.lights.length} lights · ${doc.acs.length} ACs · `,
+        doc.cameras.length ? `${doc.cameras.length} cameras · ` : '',
         `${linked} linked to real devices`, dirty ? h('span.dirty', ' · unsaved changes') : '');
     } catch (e) {
       valid = null;
@@ -178,8 +204,24 @@ export async function bootEditor(root) {
     previewTimer = setTimeout(buildPreview, delay);
   }
 
+  // What the preview shows without building it again: inside or outside, or a camera's picture.
+  function syncPreview() {
+    const cam = sel.kind === 'camera' ? doc.cameras[sel.index] : null;
+    const pov = Boolean(cam && previewPov);
+    povChip.hidden = !cam;
+    povChip.replaceChildren(icon(pov ? 'map' : 'cctv', 14), pov ? 'Overview' : 'Camera’s view');
+    viewChip.hidden = pov;
+    viewChip.replaceChildren(icon(previewOutside ? 'home' : 'trees', 14), previewOutside ? 'Inside' : 'Outside');
+    viewChip.title = previewOutside ? 'Show the rooms, cut open' : 'Show the house on its site, with its cameras';
+    previewToggle.hidden = pov || previewOutside;
+    if (!world) return;
+    world.setOutside(previewOutside);
+    world.lookThrough(pov ? cam.id : null);
+  }
+
   function buildPreview() {
     previewToggle.replaceChildren(icon(previewLights ? 'bright' : 'moon', 14), previewLights ? 'Lights on' : 'Lights off');
+    syncPreview();
     if (!valid) return;
     if (isPhone && !phone.show3D) { world?.dispose(); world = null; previewHost.replaceChildren(); return; }
     world?.dispose();
@@ -188,6 +230,7 @@ export async function bootEditor(root) {
     previewHost.replaceChildren(canvas);
     try {
       world = createWorld(canvas, valid, previewStore(valid), {
+        outside: previewOutside,
         onHover() {},
         onPick(t) {
           if (!t) return;
@@ -196,6 +239,7 @@ export async function bootEditor(root) {
         },
       });
       world.setInsets(isPhone ? 20 : 6, isPhone ? 20 : 6);
+      syncPreview();
       world.setRunning(true);
       const w = world;
       new ResizeObserver(() => { if (world === w) w.resize(); }).observe(canvas);
@@ -210,6 +254,13 @@ export async function bootEditor(root) {
     if (kind === 'room') return [item.name || item.id, `${fix(item.rect[2])} × ${fix(item.rect[3])} m`];
     if (kind === 'light') return [item.name || item.id, `${roomName(item.room)} · ${item.type}`];
     if (kind === 'ac') return [item.name || item.id, `${roomName(item.room)} · ${item.wall} wall`];
+    if (kind === 'camera') return [item.name || item.id, `${item.fov ?? 100}° · ${item.range ?? 12} m`];
+    if (kind === 'outdoor') {
+      const shape = outdoorShape(item.type);
+      return [OUTDOOR_LABEL[item.type] || item.type, shape === 'line' ? `${fix(Math.hypot(item.to[0] - item.from[0], item.to[1] - item.from[1]))} m`
+        : shape === 'point' ? `${item.height ?? OUTDOOR_HEIGHT.tree} m high`
+          : shape === 'vehicle' ? roomName(roomAt(item.pos)?.id) || 'parked' : `${fix(item.rect[2])} × ${fix(item.rect[3])} m`];
+    }
     if (kind === 'furniture') return [item.type, roomName(roomAt(item.pos)?.id) || '—'];
     if (kind === 'opening') return [item.type || 'door', `${fix(Math.hypot(item.to[0] - item.from[0], item.to[1] - item.from[1]))} m`];
     return [item.name || item.id, `${Object.keys(item.lights || {}).length} rules`];
@@ -221,7 +272,9 @@ export async function bootEditor(root) {
   function renderSidebar() {
     const nodes = [h(`button.row.home-row${sel.kind === 'home' ? '.active' : ''}`, { onclick: () => select({ kind: 'home' }) },
       icon('home', 15), h('span.row-name', 'Home settings')),
-    links.sidebarRow(sel.kind === 'connections' || sel.kind === 'service', () => select({ kind: 'connections' }))];
+    links.sidebarRow(sel.kind === 'connections' || sel.kind === 'service', () => select({ kind: 'connections' })),
+    h(`button.row.home-row${sel.kind === 'site' ? '.active' : ''}`, { onclick: () => select({ kind: 'site' }) },
+      icon('fence', 15), h('span.row-name', 'Property line'), h('span.row-sub', doc.site?.boundary ? `${doc.site.boundary.length} corners` : 'none'))];
     for (const kind of Object.keys(KEYS)) {
       const items = doc[KEYS[kind]];
       nodes.push(h('div.group',
@@ -243,7 +296,7 @@ export async function bootEditor(root) {
   }
 
   function uniqueId(base) {
-    const ids = new Set([...doc.rooms, ...doc.lights, ...doc.acs, ...doc.scenes].map((x) => x.id));
+    const ids = new Set([...doc.rooms, ...doc.lights, ...doc.acs, ...doc.cameras, ...doc.scenes].map((x) => x.id));
     if (!ids.has(base)) return base;
     for (let i = 2; ; i++) if (!ids.has(`${base}${i}`)) return `${base}${i}`;
   }
@@ -269,11 +322,69 @@ export async function bootEditor(root) {
       if (!room) return toast('Add a room first', true);
       const z = room.rect[1] + room.rect[3];
       list.push({ type: 'door', from: [fix(center[0] - 0.45), fix(z)], to: [fix(center[0] + 0.45), fix(z)] });
+    } else if (kind === 'camera') {
+      if (!room) return toast('Add a room first', true);
+      // On the outside of the room's south wall when there is one, looking out.
+      const cam = { id: uniqueId('camera'), name: `Camera ${doc.cameras.length + 1}`, pos: [center[0], fix(room.rect[1] + room.rect[3] + 0.2)], y: 2.5, rot: 0, tilt: 25, fov: 100, range: 12 };
+      if (!snapCamera(cam, cam.pos)) cam.pos = center;
+      list.push(cam);
+    } else if (kind === 'outdoor') {
+      const b = bounds();
+      const z = fix(b.maxZ + (doc.site?.boundary ? -0.5 : 2));
+      list.push({ type: 'fence', from: [fix(b.minX + 0.5), z], to: [fix(Math.min(b.maxX - 0.5, b.minX + 4.5)), z] });
     } else if (kind === 'scene') {
       list.push({ id: uniqueId('scene'), name: 'New scene', icon: 'sparkles', lights: { '*': { on: false } } });
     }
     sel = { kind, index: list.length - 1 };
     touch();
+  }
+
+  // A property line a few metres around the house.
+  function addBoundary() {
+    snapshot();
+    const b = bounds({ house: true });
+    const m = 4;
+    doc.site = { ...(doc.site || {}), boundary: [[b.minX - m, b.minZ - m], [b.maxX + m, b.minZ - m], [b.maxX + m, b.maxZ + m], [b.minX - m, b.maxZ + m]].map((p) => p.map(fix)) };
+    sel = { kind: 'site' };
+    touch();
+  }
+
+  // Another corner, in the middle of the longest side.
+  function addCorner() {
+    const pts = doc.site.boundary;
+    let best = 0;
+    let len = -1;
+    pts.forEach((p, i) => {
+      const q = pts[(i + 1) % pts.length];
+      const l = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      if (l > len) { len = l; best = i; }
+    });
+    snapshot();
+    const p = pts[best];
+    const q = pts[(best + 1) % pts.length];
+    pts.splice(best + 1, 0, [fix(round((p[0] + q[0]) / 2)), fix(round((p[1] + q[1]) / 2))]);
+    touch();
+  }
+
+  // Changing what an outside item is can change its shape: a line, a point or a rectangle.
+  function setOutdoorType(item, type) {
+    // A tree and a vehicle both stand at a point.
+    const family = (t) => (outdoorShape(t) === 'vehicle' ? 'point' : outdoorShape(t));
+    const from = family(item.type);
+    const to = family(type);
+    item.type = type;
+    delete item.height;
+    if (VEHICLE_SIZE[type]) delete item.radius;
+    else { delete item.rot; delete item.color; }
+    if (from === to) return;
+    const box = from === 'line' ? [Math.min(item.from[0], item.to[0]), Math.min(item.from[1], item.to[1]), Math.max(item.from[0], item.to[0]), Math.max(item.from[1], item.to[1])]
+      : from === 'point' ? [item.pos[0] - 1, item.pos[1] - 1, item.pos[0] + 1, item.pos[1] + 1]
+        : [item.rect[0], item.rect[1], item.rect[0] + item.rect[2], item.rect[1] + item.rect[3]];
+    const [cx, cz] = [fix((box[0] + box[2]) / 2), fix((box[1] + box[3]) / 2)];
+    for (const k of ['from', 'to', 'pos', 'rect', 'radius']) delete item[k];
+    if (to === 'line') { item.from = [fix(box[0]), cz]; item.to = [fix(Math.max(box[2], box[0] + 1)), cz]; }
+    else if (to === 'point') item.pos = [cx, cz];
+    else item.rect = [fix(box[0]), fix(box[1]), fix(Math.max(1, box[2] - box[0])), fix(Math.max(1, box[3] - box[1]))];
   }
 
   // The middle of the room, or the nearest place around it no other lamp stands on.
@@ -310,13 +421,21 @@ export async function bootEditor(root) {
 
   /* ---------- plan (SVG) ---------- */
 
-  function bounds() {
+  // The house, or (by default) everything on the plan: the property line, what is outside, the cameras.
+  function bounds({ house = false } = {}) {
     const rs = doc.rooms.length ? doc.rooms : [{ rect: [0, 0, 6, 4] }];
-    const minX = Math.min(...rs.map((r) => r.rect[0]));
-    const minZ = Math.min(...rs.map((r) => r.rect[1]));
-    const maxX = Math.max(...rs.map((r) => r.rect[0] + r.rect[2]));
-    const maxZ = Math.max(...rs.map((r) => r.rect[1] + r.rect[3]));
-    return { minX, minZ, maxX, maxZ };
+    const xs = [...rs.map((r) => r.rect[0]), ...rs.map((r) => r.rect[0] + r.rect[2])];
+    const zs = [...rs.map((r) => r.rect[1]), ...rs.map((r) => r.rect[1] + r.rect[3])];
+    if (!house) {
+      const take = (p) => { if (Array.isArray(p) && p.every(Number.isFinite)) { xs.push(p[0]); zs.push(p[1]); } };
+      for (const p of doc.site?.boundary || []) take(p);
+      for (const o of doc.outdoor) {
+        take(o.from); take(o.to); take(o.pos);
+        if (Array.isArray(o.rect)) { take(o.rect); take([o.rect[0] + o.rect[2], o.rect[1] + o.rect[3]]); }
+      }
+      for (const c of doc.cameras) take(c.pos);
+    }
+    return { minX: Math.min(...xs), minZ: Math.min(...zs), maxX: Math.max(...xs), maxZ: Math.max(...zs) };
   }
 
   const isSel = (kind, index) => sel.kind === kind && sel.index === index;
@@ -325,15 +444,47 @@ export async function bootEditor(root) {
     const b = bounds();
     const m = 1.4;
     if (isPhone) phone.applyView();
-    else plan.setAttribute('viewBox', `${b.minX - m} ${b.minZ - m} ${b.maxX - b.minX + m * 2} ${b.maxZ - b.minZ + m * 2}`);
+    // The view holds still while something is dragged, or the plan would slide away under the pointer.
+    else if (!drag) plan.setAttribute('viewBox', `${b.minX - m} ${b.minZ - m} ${b.maxX - b.minX + m * 2} ${b.maxZ - b.minZ + m * 2}`);
     // Fingers are bigger than a mouse pointer: on a phone small things get a wider target.
     const big = isPhone;
     const kids = [
       sv('defs', {}, sv('pattern', { id: 'grid', width: 1, height: 1, patternUnits: 'userSpaceOnUse' },
         sv('path', { d: 'M1 0H0V1', fill: 'none', stroke: 'rgba(255,255,255,0.07)', 'stroke-width': 0.015 }),
         sv('path', { d: 'M0.5 0V1M0 0.5H1', fill: 'none', stroke: 'rgba(255,255,255,0.03)', 'stroke-width': 0.01 }))),
-      sv('rect', { x: b.minX - 20, y: b.minZ - 20, width: 60, height: 60, fill: 'url(#grid)', 'data-kind': 'none' }),
+      sv('rect', { x: b.minX - 20, y: b.minZ - 20, width: b.maxX - b.minX + 40, height: b.maxZ - b.minZ + 40, fill: 'url(#grid)', 'data-kind': 'none' }),
     ];
+
+    const lot = doc.site?.boundary;
+    if (lot?.length >= 3 && lot.every((p) => Array.isArray(p))) {
+      const points = lot.map((p) => p.join(',')).join(' ');
+      kids.push(sv('polygon', { points, class: `p-site${sel.kind === 'site' ? ' sel' : ''}`, 'data-kind': 'site' }));
+      if (big) kids.push(sv('polygon', { points, class: 'p-hit p-site-hit', 'data-kind': 'site' }));
+    }
+    // Paving lies under everything; the rest of what is outside stands among the rooms.
+    const outdoorNodes = [];
+    doc.outdoor.forEach((o, i) => {
+      const cls = `p-out ${o.type}${isSel('outdoor', i) ? ' sel' : ''}`;
+      const attrs = { class: cls, 'data-kind': 'outdoor', 'data-index': i };
+      const shape = outdoorShape(o.type);
+      if (shape === 'line' && Array.isArray(o.from) && Array.isArray(o.to)) {
+        const line = { x1: o.from[0], y1: o.from[1], x2: o.to[0], y2: o.to[1] };
+        if (big) outdoorNodes.push(sv('line', { class: 'p-hit', 'data-kind': 'outdoor', 'data-index': i, ...line }));
+        outdoorNodes.push(sv('line', { ...attrs, ...line }));
+      } else if (shape === 'vehicle' && Array.isArray(o.pos)) {
+        const [len, wid] = VEHICLE_SIZE[o.type];
+        outdoorNodes.push(sv('g', { ...attrs, transform: `translate(${o.pos[0]} ${o.pos[1]}) rotate(${-(o.rot || 0)})` },
+          sv('rect', { x: -wid / 2, y: -len / 2, width: wid, height: len, rx: 0.35, style: o.color ? `fill: ${o.color}` : null }),
+          // the windscreen marks the front
+          sv('path', { d: `M${-wid / 2 + 0.2} ${len / 2 - (o.type === 'van' ? 0.95 : 1.5)}h${wid - 0.4}`, class: 'front' })));
+      } else if (shape === 'point' && Array.isArray(o.pos)) {
+        outdoorNodes.push(sv('g', { ...attrs, transform: `translate(${o.pos[0]} ${o.pos[1]})` },
+          sv('circle', { r: o.radius ?? 1.5 }), sv('circle', { r: 0.12, class: 'trunk' })));
+      } else if (Array.isArray(o.rect)) {
+        const [x, z, w, d] = o.rect;
+        (o.type === 'paving' ? kids : outdoorNodes).push(sv('rect', { ...attrs, x, y: z, width: w, height: d }));
+      }
+    });
 
     doc.rooms.forEach((r, i) => {
       const [x, z, w, d] = r.rect;
@@ -342,6 +493,22 @@ export async function bootEditor(root) {
         sv('text', { x: x + w / 2, y: z + d / 2 - 0.02, class: 'p-label' }, document.createTextNode(r.name || r.id)),
         sv('text', { x: x + w / 2, y: z + d / 2 + 0.3, class: 'p-dim' }, document.createTextNode(`${fix(w)} × ${fix(d)}`)));
       kids.push(g);
+    });
+
+    kids.push(...outdoorNodes);
+
+    // What each camera covers on the ground, under the furniture and devices.
+    const cams = doc.cameras.map((c, i) => {
+      if (!Array.isArray(c.pos)) return null;
+      const cfg = withCameraDefaults(c);
+      if (![cfg.y, cfg.rot, cfg.tilt, cfg.fov, cfg.range].every(Number.isFinite)) return null;
+      const color = cameraColor(i);
+      const { ends } = viewEdge({ ...cfg, fov: Math.min(Math.max(cfg.fov, 20), 180) });
+      kids.push(sv('polygon', {
+        class: `p-cam-view${isSel('camera', i) ? ' sel' : ''}`, points: ends.map((p) => `${fix(p.x)},${fix(p.z)}`).join(' '),
+        style: `--cam: ${color}`,
+      }));
+      return { c: cfg, i, color };
     });
 
     doc.furniture.forEach((f, i) => {
@@ -389,6 +556,36 @@ export async function bootEditor(root) {
       kids.push(g);
     });
 
+    for (const cam of cams) {
+      if (!cam) continue;
+      const { c, i, color } = cam;
+      const g = sv('g', {
+        class: `p-cam${isSel('camera', i) ? ' sel' : ''}`, 'data-kind': 'camera', 'data-index': i, style: `--cam: ${color}`,
+        transform: `translate(${c.pos[0]} ${c.pos[1]}) rotate(${-c.rot})`,
+      });
+      if (big) g.append(sv('circle', { r: 0.5, class: 'hit' }));
+      g.append(sv('circle', { r: 0.26, class: 'ring' }), sv('rect', { x: -0.09, y: -0.12, width: 0.18, height: 0.3, rx: 0.05 }),
+        sv('circle', { cx: 0, cy: 0.18, r: 0.05, class: 'lens' }));
+      kids.push(g);
+      if (isSel('camera', i)) {
+        const a = c.rot * Math.PI / 180;
+        const [kx, kz] = [c.pos[0] + Math.sin(a) * AIM_REACH, c.pos[1] + Math.cos(a) * AIM_REACH];
+        kids.push(sv('line', { x1: c.pos[0], y1: c.pos[1], x2: kx, y2: kz, class: 'p-aim-line' }));
+        if (big) kids.push(sv('circle', { cx: kx, cy: kz, r: 0.5, class: 'hit', 'data-kind': 'aim', 'data-index': i }));
+        kids.push(sv('circle', { cx: kx, cy: kz, r: big ? 0.2 : 0.13, class: 'p-handle aim', 'data-kind': 'aim', 'data-index': i }));
+      }
+    }
+
+    // Handles of what is selected outside: corners of the property line, ends of a fence, a shed's corner.
+    const handle = (x, z, kind, index, extra = {}) => {
+      if (big) kids.push(sv('circle', { cx: x, cy: z, r: 0.55, class: 'hit', 'data-kind': kind, 'data-index': index, ...extra }));
+      kids.push(sv('circle', { cx: x, cy: z, r: big ? 0.22 : 0.15, class: `p-handle ${kind}`, 'data-kind': kind, 'data-index': index, ...extra }));
+    };
+    if (sel.kind === 'site' && lot) lot.forEach((p, i) => handle(p[0], p[1], 'corner', i));
+    const out = sel.kind === 'outdoor' && doc.outdoor[sel.index];
+    if (out && outdoorShape(out.type) === 'line') { handle(...out.from, 'end', sel.index, { 'data-end': 0 }); handle(...out.to, 'end', sel.index, { 'data-end': 1 }); }
+    if (out && outdoorShape(out.type) === 'rect') handle(out.rect[0] + out.rect[2], out.rect[1] + out.rect[3], 'oresize', sel.index);
+
     if (sel.kind === 'room' && doc.rooms[sel.index]) {
       const [x, z, w, d] = doc.rooms[sel.index].rect;
       if (big) kids.push(sv('circle', { cx: x + w, cy: z + d, r: 0.55, class: 'hit', 'data-kind': 'resize', 'data-index': sel.index }));
@@ -422,12 +619,39 @@ export async function bootEditor(root) {
     ac.pos = wall === 'north' ? [cx, rz] : wall === 'south' ? [cx, fix(rz + rd)] : wall === 'west' ? [rx, cz] : [fix(rx + rw), cz];
   }
 
+  // A camera dropped close to the outside of an outer wall hangs on it, looking away from it.
+  // Returns whether it snapped; anywhere else it stands where it was dropped (on a pole, say).
+  function snapCamera(cam, [x, z]) {
+    const rooms = doc.rooms.map((r) => ({ x: r.rect[0], z: r.rect[1], w: r.rect[2], d: r.rect[3] }));
+    const face = EXT_T / 2 + 0.08;
+    let best = null;
+    for (const s of wallSegments({ rooms, openings: [] })) {
+      if (s.kind !== 'exterior') continue;
+      const out = -s.inside; // +1: the outside is towards larger x (or z)
+      const along = s.axis === 'x' ? x : z;
+      const across = s.axis === 'x' ? z : x;
+      if (along < s.a - 0.1 || along > s.b + 0.1 || (across - s.c) * out < -0.05) continue;
+      const d = Math.abs(across - (s.c + out * face));
+      if (d < 0.45 && (!best || d < best.d)) best = { d, s, out, along: clamp(along, s.a + 0.15, s.b - 0.15) };
+    }
+    if (!best) {
+      cam.pos = [fix(round(x)), fix(round(z))];
+      return false;
+    }
+    const { s, out, along } = best;
+    const across = fix(s.c + out * face);
+    cam.pos = s.axis === 'x' ? [fix(round(along)), across] : [across, fix(round(along))];
+    cam.rot = s.axis === 'x' ? (out > 0 ? 0 : 180) : (out > 0 ? 90 : -90);
+    return true;
+  }
+
   let drag = null;
   plan.addEventListener('pointerdown', (ev) => {
     if (isPhone) return;
     const el = ev.target.closest('[data-kind]');
     const kind = el?.dataset.kind;
     if (!kind || kind === 'none') { select({ kind: 'home' }); return; }
+    if (kind === 'site' && sel.kind !== 'site') { select({ kind: 'site' }); return; }
     plan.setPointerCapture(ev.pointerId);
     startDrag(kind, Number(el.dataset.index), ev);
   });
@@ -437,6 +661,18 @@ export async function bootEditor(root) {
     const start = planPoint(ev);
     if (kind === 'resize') {
       drag = { kind, index, start, rect: [...doc.rooms[index].rect] };
+      return;
+    }
+    if (kind === 'corner') { drag = { kind, index, start, pos: [...doc.site.boundary[index]] }; return; }
+    if (kind === 'end') {
+      const end = Number(ev.target.closest('[data-end]')?.dataset.end || 0) ? 'to' : 'from';
+      drag = { kind, index, start, end, pos: [...doc.outdoor[index][end]] };
+      return;
+    }
+    if (kind === 'oresize') { drag = { kind, index, start, rect: [...doc.outdoor[index].rect] }; return; }
+    if (kind === 'aim') { drag = { kind, index, start }; return; }
+    if (kind === 'site') {
+      drag = { kind, index, start, moved: false, boundary: doc.site.boundary.map((p) => [...p]) };
       return;
     }
     if (!isSel(kind, index)) select({ kind, index });
@@ -451,11 +687,16 @@ export async function bootEditor(root) {
         ...doc.lights.filter((l) => l.room === item.id).map((o) => ({ o, pos: [...o.pos] })),
         ...doc.acs.filter((a) => a.room === item.id).map((o) => ({ o, pos: [...o.pos] })),
         ...doc.furniture.filter((f) => Array.isArray(f.pos) && inside(f.pos)).map((o) => ({ o, pos: [...o.pos] })),
+        // and the cameras inside it or hung on its walls
+        ...doc.cameras.filter((c) => Array.isArray(c.pos) && c.pos[0] >= x - 0.35 && c.pos[0] <= x + w + 0.35 && c.pos[1] >= z - 0.35 && c.pos[1] <= z + d + 0.35)
+          .map((o) => ({ o, pos: [...o.pos] })),
       ];
       drag.openings = doc.openings.filter((o) => inside(o.from) && inside(o.to)).map((o) => ({ o, from: [...o.from], to: [...o.to] }));
-    } else if (kind === 'opening') {
+    } else if (kind === 'opening' || (kind === 'outdoor' && item.from)) {
       drag.from = [...item.from];
       drag.to = [...item.to];
+    } else if (kind === 'outdoor' && item.rect) {
+      drag.rect = [...item.rect];
     } else {
       drag.pos = [...item.pos];
     }
@@ -470,9 +711,31 @@ export async function bootEditor(root) {
     const dz = round(pz - drag.start[1]);
     if (!drag.moved && !dx && !dz) return;
     if (!drag.moved) { drag.moved = true; snapshot(); haptic('tick'); }
-    const item = drag.kind === 'resize' ? doc.rooms[drag.index] : doc[KEYS[drag.kind]][drag.index];
+    const item = drag.kind === 'resize' ? doc.rooms[drag.index]
+      : HANDLES.has(drag.kind) && drag.kind !== 'aim' ? null : drag.kind === 'aim' ? doc.cameras[drag.index]
+        : drag.kind === 'site' ? doc.site : doc[KEYS[drag.kind]][drag.index];
 
-    if (drag.kind === 'resize') {
+    if (drag.kind === 'corner') {
+      doc.site.boundary[drag.index] = [fix(drag.pos[0] + dx), fix(drag.pos[1] + dz)];
+    } else if (drag.kind === 'end') {
+      doc.outdoor[drag.index][drag.end] = [fix(drag.pos[0] + dx), fix(drag.pos[1] + dz)];
+    } else if (drag.kind === 'oresize') {
+      const o = doc.outdoor[drag.index];
+      o.rect[2] = fix(Math.max(0.5, round(drag.rect[2] + px - drag.start[0], 0.1)));
+      o.rect[3] = fix(Math.max(0.5, round(drag.rect[3] + pz - drag.start[1], 0.1)));
+    } else if (drag.kind === 'aim') {
+      item.rot = Math.round(Math.atan2(px - item.pos[0], pz - item.pos[1]) * 180 / Math.PI / 5) * 5;
+    } else if (drag.kind === 'site') {
+      item.boundary = drag.boundary.map((p) => [fix(p[0] + dx), fix(p[1] + dz)]);
+    } else if (drag.kind === 'camera') {
+      snapCamera(item, [drag.pos[0] + px - drag.start[0], drag.pos[1] + pz - drag.start[1]]);
+    } else if (drag.kind === 'outdoor' && item.rect) {
+      item.rect[0] = fix(drag.rect[0] + dx);
+      item.rect[1] = fix(drag.rect[1] + dz);
+    } else if (drag.kind === 'outdoor' && item.from) {
+      item.from = [fix(drag.from[0] + dx), fix(drag.from[1] + dz)];
+      item.to = [fix(drag.to[0] + dx), fix(drag.to[1] + dz)];
+    } else if (drag.kind === 'resize') {
       item.rect[2] = fix(Math.max(1, round(drag.rect[2] + px - drag.start[0], 0.1)));
       item.rect[3] = fix(Math.max(1, round(drag.rect[3] + pz - drag.start[1], 0.1)));
     } else if (drag.kind === 'room') {
@@ -500,7 +763,12 @@ export async function bootEditor(root) {
     touch();
   }
 
-  const endDrag = () => { drag = null; lastSnapshotKey = null; };
+  const endDrag = () => {
+    const moved = drag?.moved;
+    drag = null;
+    lastSnapshotKey = null;
+    if (moved && !isPhone) renderPlan();
+  };
   plan.addEventListener('pointerup', () => { if (!isPhone) endDrag(); });
   plan.addEventListener('pointercancel', () => { if (!isPhone) endDrag(); });
 
@@ -557,7 +825,10 @@ export async function bootEditor(root) {
       nodes.push(section('Building',
         row(bind('Wall height, m', number(0.1), { ...prop(doc, 'wallHeight', 2.6), parse: parseNum }),
           bind('Inner walls shown, m', number(0.05), { ...prop(doc, 'interiorWallHeight', 1.25), parse: parseNum })),
-        bind('Outdoor temperature, °C', number(1), { ...prop(doc, 'outdoorTemp', 27), parse: parseNum })),
+        bind('Outdoor temperature, °C', number(1), { ...prop(doc, 'outdoorTemp', 27), parse: parseNum }),
+        h('div.checks', bind('Flat roof in the outside view', h('input', { type: 'checkbox' }), {
+          get: () => doc.roof !== false, set: (on) => { if (on) delete doc.roof; else doc.roof = false; }, event: 'change',
+        }))),
       section('Default camera',
         row(bind('Azimuth, °', number(1), { ...prop(doc.camera, 'azimuth', 34), parse: parseNum }),
           bind('Elevation, °', number(1), { ...prop(doc.camera, 'elevation', 47), parse: parseNum })),
@@ -575,6 +846,29 @@ export async function bootEditor(root) {
       nodes.push(h('div.insp-head.svc-head', links.tile(sel.service, 40),
         h('div', h('h2', links.title(sel.service)), h('span', links.blurb(sel.service)))));
       nodes.push(...[links.detail(sel.service, tuyaPanel)].flat());
+    } else if (kind === 'site') {
+      head('Property line', 'The edge of your plot, for the view from outside');
+      doc.site ||= {};
+      const lot = doc.site.boundary;
+      if (!lot) {
+        nodes.push(section('Property line',
+          h('p.note', 'Draw where your plot ends, so the view from outside shows your garden, drive and fences, and the cameras can be planned against it.'),
+          h('button.btn.primary.wide', { onclick: addBoundary }, icon('plus', 14, 2.4), 'Draw one around the house')));
+      } else {
+        nodes.push(section('Corners, m',
+          lot.map((p, i) => h('div.corner-row', h('span.corner-n', String(i + 1)),
+            row(bind('X', number(), { get: () => p[0], set: (v) => { p[0] = v; }, parse: parseNum }),
+              bind('Z', number(), { get: () => p[1], set: (v) => { p[1] = v; }, parse: parseNum })),
+            h('button.del-corner', {
+              'aria-label': `Remove corner ${i + 1}`, disabled: lot.length <= 3,
+              onclick: () => { snapshot(); lot.splice(i, 1); touch(); },
+            }, icon('close', 13, 2.4)))),
+          h('div.fields', h('button.btn', { onclick: addCorner }, icon('plus', 13, 2.4), 'Add a corner'),
+            h('button.btn', { onclick: () => { snapshot(); delete doc.site.boundary; touch(); } }, 'Remove the line')),
+          h('p.note', 'Drag a corner on the plan to move it, or the line itself to move all of it. A new corner goes in the middle of the longest side.')));
+      }
+      nodes.push(section('Ground',
+        bind('Inside the line', choice(GROUND_KINDS), { ...prop(doc.site, 'ground', 'grass'), event: 'change' })));
     } else if (!item) {
       head('Nothing selected');
       if (isPhone) nodes.push(h('p.note', 'Tap a room, a lamp or anything else on the plan.'));
@@ -627,6 +921,48 @@ export async function bootEditor(root) {
         h('p.note', 'Dragging the unit on the plan snaps it to the nearest wall of its room.')),
       links.deviceSection(item, 'ac', linkHooks),
       links.sensorSection(item, linkHooks));
+    } else if (kind === 'camera') {
+      head(item.name || item.id, `id: ${item.id}`);
+      nodes.push(section('Security camera',
+        bind('Name', text(), prop(item, 'name', '')),
+        row(bind('Angle of view, °', number(1), { ...prop(item, 'fov', 100), parse: (v) => { const n = parseNum(v); return n >= 20 && n <= 180 ? n : undefined; } }),
+          bind('Resolution', choice(RESOLUTIONS), {
+            get: () => (item.resolution || [2560, 1440]).join('x'),
+            set: (v) => { item.resolution = v.split('x').map(Number); },
+            event: 'change',
+          })),
+        h('p.note', 'The horizontal angle from its spec sheet: about 100–110° for a 2.8 mm lens, 80–90° for 4 mm, 50–60° for 6 mm.')),
+      section('Where it hangs, m',
+        row(bind('X', number(), { ...at(item, 'pos', 0), parse: parseNum }), bind('Z', number(), { ...at(item, 'pos', 1), parse: parseNum })),
+        row(bind('Height', number(0.1), { ...prop(item, 'y', 2.5), parse: parseNum }),
+          bind('Range', number(1), { ...prop(item, 'range', 12), parse: (v) => { const n = parseNum(v); return n > 0 ? n : undefined; } }))),
+      section('Aim, °',
+        row(bind('Turned to', number(5), { ...prop(item, 'rot', 0), parse: parseNum }),
+          bind('Tilted down', number(1), { ...prop(item, 'tilt', 25), parse: parseNum })),
+        h('p.note', 'Drop a camera on the outside of a wall and it hangs there, looking away from it. Drag the knob in front of it to turn it. 0° looks south (down the plan), 90° east.')));
+    } else if (kind === 'outdoor') {
+      const shape = outdoorShape(item.type);
+      head(OUTDOOR_LABEL[item.type] || item.type, 'Outside the house');
+      const pos = shape === 'line'
+        ? [row(bind('From X', number(), { ...at(item, 'from', 0), parse: parseNum }), bind('From Z', number(), { ...at(item, 'from', 1), parse: parseNum })),
+          row(bind('To X', number(), { ...at(item, 'to', 0), parse: parseNum }), bind('To Z', number(), { ...at(item, 'to', 1), parse: parseNum }))]
+        : shape === 'vehicle'
+          ? [row(bind('X', number(), { ...at(item, 'pos', 0), parse: parseNum }), bind('Z', number(), { ...at(item, 'pos', 1), parse: parseNum })),
+            row(bind('Facing, °', number(15), { ...prop(item, 'rot', 0), parse: parseNum }),
+              bind('Colour (hex, optional)', text(), optional(item, 'color')))]
+        : shape === 'point'
+          ? [row(bind('X', number(), { ...at(item, 'pos', 0), parse: parseNum }), bind('Z', number(), { ...at(item, 'pos', 1), parse: parseNum })),
+            bind('Crown radius, m', number(0.1), { ...prop(item, 'radius', 1.5), parse: (v) => { const n = parseNum(v); return n > 0.2 ? n : undefined; } })]
+          : [row(bind('X', number(0.1), { ...at(item, 'rect', 0), parse: parseNum }), bind('Z', number(0.1), { ...at(item, 'rect', 1), parse: parseNum })),
+            row(bind('Width', number(0.1), { ...at(item, 'rect', 2), parse: parseNum }), bind('Depth', number(0.1), { ...at(item, 'rect', 3), parse: parseNum }))];
+      nodes.push(section('Outside',
+        row(bind('Type', choice(OUTDOOR_KINDS.map((t) => [t, OUTDOOR_LABEL[t]])), { get: () => item.type, set: (t) => setOutdoorType(item, t), event: 'change' }),
+          item.type === 'paving' ? null : bind('Height, m', number(0.1), { ...prop(item, 'height', OUTDOOR_HEIGHT[item.type]), parse: parseNum }))),
+      section('Position, m', ...pos,
+        h('p.note', shape === 'line' ? 'Drag its ends on the plan to stretch or turn it; it does not have to follow the house’s walls.'
+          : shape === 'rect' ? 'Drag its corner on the plan to resize it.'
+            : shape === 'vehicle' ? 'Park it where it usually stands: a van on the drive can hide the gate from a camera. 0° faces south, 90° east.'
+              : 'Trees, sheds and fences will matter for what the cameras can see.')));
     } else if (kind === 'furniture') {
       head(item.type, 'Decoration only');
       nodes.push(section('Furniture',
@@ -884,15 +1220,17 @@ export async function bootEditor(root) {
       remove(sel.kind, sel.index);
     } else if (ev.key.startsWith('Arrow') && !typing && sel.index != null) {
       const item = doc[KEYS[sel.kind]][sel.index];
-      const target = item.pos || item.rect;
-      if (!target) return;
+      const targets = [item.pos || item.rect || item.from, item.from ? item.to : null].filter(Boolean);
+      if (!targets.length) return;
       ev.preventDefault();
       const stepSize = ev.shiftKey ? 0.5 : 0.05;
       snapshot(`nudge${sel.kind}${sel.index}`);
-      if (ev.key === 'ArrowLeft') target[0] = fix(target[0] - stepSize);
-      if (ev.key === 'ArrowRight') target[0] = fix(target[0] + stepSize);
-      if (ev.key === 'ArrowUp') target[1] = fix(target[1] - stepSize);
-      if (ev.key === 'ArrowDown') target[1] = fix(target[1] + stepSize);
+      for (const target of targets) {
+        if (ev.key === 'ArrowLeft') target[0] = fix(target[0] - stepSize);
+        if (ev.key === 'ArrowRight') target[0] = fix(target[0] + stepSize);
+        if (ev.key === 'ArrowUp') target[1] = fix(target[1] - stepSize);
+        if (ev.key === 'ArrowDown') target[1] = fix(target[1] + stepSize);
+      }
       touch();
     }
   });
@@ -929,10 +1267,16 @@ export async function bootEditor(root) {
     const addables = [
       ['room', 'home', 'Room'], ['light', 'bulb', 'Lamp'], ['ac', 'ac', 'Air conditioner'],
       ['opening', 'opening', 'Door or window'], ['furniture', 'furniture', 'Furniture'], ['scene', 'sparkles', 'Scene'],
+      ['camera', 'cctv', 'Security camera'], ['outdoor', 'trees', 'Fence, tree…'], ['site', 'fence', 'Property line'],
     ];
     addSheet.append(h('div.p-modal-head', h('b', 'Add to the plan'), h('button.p-text', { onclick: closeModals }, 'Cancel')),
       h('div.p-add-grid', addables.map(([kind, name, label]) => h('button.p-add-item', {
-        onclick: () => { closeModals(); add(kind); haptic('light'); ui.reveal(); },
+        onclick: () => {
+          closeModals();
+          if (kind === 'site') { if (doc.site?.boundary) select({ kind: 'site' }); else addBoundary(); setSheet('peek'); } else add(kind);
+          haptic('light');
+          ui.reveal();
+        },
       }, icon(name, 24, 1.8), h('span', label)))));
     confirmSheet.append(h('div.p-modal-head', h('b', 'Unsaved changes')),
       h('p.note', 'Save them before closing? Saved plans reach your paired Mac too.'),
@@ -942,7 +1286,7 @@ export async function bootEditor(root) {
         h('button.btn.wide', { onclick: closeModals }, 'Keep editing')));
 
     sheet.append(grip, inspector);
-    canvas.append(plan, h('div.p-preview', previewHost, previewToggle), issue, fitBtn, hint);
+    canvas.append(plan, h('div.p-preview', previewHost, chips), issue, fitBtn, hint);
     const shell = h('div.editor.phone',
       h('header.p-bar', h('button.p-icon', { 'aria-label': 'Close', onclick: requestClose }, icon('close', 20, 2.2)),
         nameInput, undoBtn, redoBtn, doneBtn),
@@ -988,7 +1332,7 @@ export async function bootEditor(root) {
 
     function closeSheet() {
       setSheet('closed');
-      if (sel.kind !== 'home') { sel = { kind: 'home' }; renderSidebar(); renderPlan(); renderInspector(); }
+      if (sel.kind !== 'home') { sel = { kind: 'home' }; renderSidebar(); renderPlan(); renderInspector(); syncPreview(); }
     }
 
     function openModal(el) {
@@ -1060,8 +1404,9 @@ export async function bootEditor(root) {
       const room = sel.kind === 'room' && doc.rooms[sel.index];
       const [px, pz] = planPoint(ev);
       const inRoom = room && px >= room.rect[0] && px <= room.rect[0] + room.rect[2] && pz >= room.rect[1] && pz <= room.rect[1] + room.rect[3];
-      if (kind === 'resize' || (kind && kind !== 'none' && isSel(kind, index)) || (inRoom && kind !== 'light' && kind !== 'ac')) {
-        const what = kind === 'resize' || isSel(kind, index) ? [kind, index] : ['room', sel.index];
+      const grabbed = HANDLES.has(kind) || (kind === 'site' && sel.kind === 'site') || (kind && kind !== 'none' && isSel(kind, index));
+      if (grabbed || (inRoom && !['light', 'ac', 'camera'].includes(kind))) {
+        const what = grabbed ? [kind, index] : ['room', sel.index];
         // The view holds still while something is dragged past the plan's edge.
         if (!ui.view) ui.view = fitBox();
         startDrag(what[0], what[1], ev);
@@ -1100,7 +1445,7 @@ export async function bootEditor(root) {
       if (!gesture) return;
       if (gesture.type === 'drag') {
         // A tap on what is already selected (just added, say) brings up its details.
-        const tapped = ev.type === 'pointerup' && drag && !drag.moved && drag.kind !== 'resize';
+        const tapped = ev.type === 'pointerup' && drag && !drag.moved && !HANDLES.has(drag.kind);
         endDrag();
         gesture = null;
         if (tapped && ui.sheet === 'closed') { haptic('light'); setSheet('peek'); }
@@ -1114,7 +1459,8 @@ export async function bootEditor(root) {
       }
       if (gesture.type === 'pan' && !gesture.moved && ev.type === 'pointerup') {
         const { kind, index } = gesture;
-        if (kind && kind !== 'none' && kind !== 'resize') { haptic('light'); select({ kind, index }); }
+        if (kind === 'site') { haptic('light'); select({ kind: 'site' }); }
+        else if (kind && kind !== 'none' && !HANDLES.has(kind)) { haptic('light'); select({ kind, index }); }
         else if (ui.sheet !== 'closed') closeSheet();
       }
       gesture = null;

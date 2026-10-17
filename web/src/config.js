@@ -30,6 +30,26 @@ export const SERVICES = {
 };
 export const FLOOR_KINDS = ['oak', 'walnut', 'tile', 'stone'];
 
+// Outside the house: lines (fences, walls…), trees, parked vehicles, and rectangles (sheds, paving).
+export const OUTDOOR_LINES = ['fence', 'wall', 'hedge', 'gate'];
+export const OUTDOOR_KINDS = [...OUTDOOR_LINES, 'tree', 'car', 'van', 'building', 'paving'];
+export const OUTDOOR_HEIGHT = { fence: 1.8, wall: 2, hedge: 1.6, gate: 1.8, tree: 5, car: 1.5, van: 2.3, building: 2.6, paving: 0 };
+// Length and width of a vehicle, in metres; it stands at `pos` and turns by `rot` like furniture.
+export const VEHICLE_SIZE = { car: [4.5, 1.85], van: [5.3, 2.05] };
+export const outdoorShape = (type) => (OUTDOOR_LINES.includes(type) ? 'line' : type === 'tree' ? 'point'
+  : VEHICLE_SIZE[type] ? 'vehicle' : 'rect');
+export const GROUND_KINDS = ['grass', 'gravel', 'concrete'];
+// A camera's sensor when the plan does not say: 2K at 16:9.
+export const CAMERA_RESOLUTION = [2560, 1440];
+
+/** A camera as written in the plan, with the defaults filled in. */
+export function withCameraDefaults(c) {
+  return {
+    ...c, name: c.name || c.id, y: c.y ?? 2.5, rot: c.rot ?? 0, tilt: c.tilt ?? 25, fov: c.fov ?? 100, range: c.range ?? 12,
+    resolution: c.resolution ?? CAMERA_RESOLUTION,
+  };
+}
+
 // The plan exactly as written on disk (the editor works on this form).
 export async function loadRawConfig() {
   const boot = window.__HOUSE_BOOT__;
@@ -107,10 +127,64 @@ export function normalize(raw) {
     return { id: s.id, name: s.name || s.id, icon: s.icon || 'sun', lights: s.lights || {}, acs: s.acs || {} };
   });
 
+  const outdoor = (raw.outdoor || []).map((o, i) => {
+    const where = `Outdoor item #${i + 1}`;
+    need(OUTDOOR_KINDS.includes(o.type), `${where} has unknown type "${o.type}" (use ${OUTDOOR_KINDS.join(', ')})`);
+    const shape = outdoorShape(o.type);
+    if (shape === 'line') {
+      need(isPoint(o.from) && isPoint(o.to), `${where} (${o.type}) needs "from" and "to" points`);
+      need(o.from[0] !== o.to[0] || o.from[1] !== o.to[1], `${where} (${o.type}) has no length`);
+    } else if (shape === 'point' || shape === 'vehicle') {
+      need(isPoint(o.pos), `${where} (${o.type}) needs "pos": [x, z]`);
+      need(o.rot == null || Number.isFinite(o.rot), `${where} (${o.type}) has a "rot" that is not a number`);
+    } else {
+      need(Array.isArray(o.rect) && o.rect.length === 4 && o.rect.every(Number.isFinite) && o.rect[2] > 0 && o.rect[3] > 0,
+        `${where} (${o.type}) needs "rect": [x, z, width, depth]`);
+    }
+    const height = o.height ?? OUTDOOR_HEIGHT[o.type];
+    // A vehicle's radius is half its length: what it can reach whichever way it is turned.
+    const radius = VEHICLE_SIZE[o.type] ? VEHICLE_SIZE[o.type][0] / 2 : o.radius ?? 1.5;
+    need(Number.isFinite(height) && (o.type === 'paving' ? height >= 0 : height > 0), `${where} (${o.type}) needs a "height" in metres above 0`);
+    need(Number.isFinite(radius) && radius > 0, `${where} (${o.type}) needs a "radius" in metres above 0`);
+    return { ...o, height, radius };
+  });
+
+  let boundary = null;
+  if (raw.site?.boundary != null) {
+    boundary = raw.site.boundary;
+    need(Array.isArray(boundary) && boundary.length >= 3 && boundary.every(isPoint),
+      'The property line ("site.boundary") needs at least three [x, z] corners');
+  }
+  const site = { boundary, ground: GROUND_KINDS.includes(raw.site?.ground) ? raw.site.ground : 'grass' };
+
+  const cameras = (raw.cameras || []).map((c) => {
+    unique(c.id, 'A camera');
+    need(isPoint(c.pos), `Camera "${c.id}" needs "pos": [x, z]`);
+    const cam = withCameraDefaults(c);
+    need(Number.isFinite(cam.fov) && cam.fov >= 20 && cam.fov <= 180, `Camera "${c.id}" needs a "fov" between 20 and 180 degrees`);
+    need(Number.isFinite(cam.range) && cam.range > 0, `Camera "${c.id}" needs a "range" in metres`);
+    need([cam.y, cam.rot, cam.tilt].every(Number.isFinite), `Camera "${c.id}" has a height, rotation or tilt that is not a number`);
+    need(isPoint(cam.resolution) && cam.resolution.every((v) => v > 0), `Camera "${c.id}" needs "resolution": [width, height] in pixels`);
+    return cam;
+  });
+
   const minX = Math.min(...rooms.map((r) => r.x));
   const minZ = Math.min(...rooms.map((r) => r.z));
   const maxX = Math.max(...rooms.map((r) => r.x + r.w));
   const maxZ = Math.max(...rooms.map((r) => r.z + r.d));
+
+  // Everything outside counts too when the whole site is shown.
+  const xs = [minX, maxX];
+  const zs = [minZ, maxZ];
+  const take = ([x, z]) => { xs.push(x); zs.push(z); };
+  // Without a property line the house stands on a lawn a few metres wide (three/site.js).
+  for (const p of boundary || [[minX - 4, minZ - 4], [maxX + 4, maxZ + 4]]) take(p);
+  for (const o of outdoor) {
+    if (o.from) { take(o.from); take(o.to); }
+    else if (o.pos) { take([o.pos[0] - o.radius, o.pos[1] - o.radius]); take([o.pos[0] + o.radius, o.pos[1] + o.radius]); }
+    else { take(o.rect); take([o.rect[0] + o.rect[2], o.rect[1] + o.rect[3]]); }
+  }
+  for (const c of cameras) take(c.pos);
 
   return {
     name: raw.name || 'Home',
@@ -124,6 +198,11 @@ export function normalize(raw) {
     lights,
     acs,
     scenes,
+    roof: raw.roof !== false,
+    site,
+    outdoor,
+    cameras,
     bounds: { minX, minZ, maxX, maxZ },
+    siteBounds: { minX: Math.min(...xs), minZ: Math.min(...zs), maxX: Math.max(...xs), maxZ: Math.max(...zs) },
   };
 }

@@ -78,7 +78,7 @@ async function boot() {
       onPick(target) {
         if (!target) return;
         if (target.kind === 'light') { haptic('light'); store.toggleLight(target.id); }
-        else if (target.kind === 'ac') panel.openSheet(target);
+        else if (target.kind === 'ac' || target.kind === 'camera') panel.openSheet(target);
         else if (target.kind === 'room') panel.selectRoom(target.id);
       },
     });

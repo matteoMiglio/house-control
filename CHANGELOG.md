@@ -5,6 +5,17 @@ What changed in each release of House Control. The Mac app is on
 
 ## Unreleased
 
+### The view from outside, for planning security cameras
+
+- **Outside view:** the trees button shows the whole house on its plot, in daylight, with a roof, and lets you walk
+  all the way round it. On the iPhone the button sits in the corner of the 3D view.
+- **The plot** in the editor: a property line with draggable corners, and fences, garden walls, hedges, gates,
+  trees, sheds, paving, and a parked car or van.
+- **Security cameras:** drop one on the outside of a wall and it hangs there, looking away from it; drag its knob to
+  aim it. Its angle of view, height, tilt, resolution and range are set in the editor, and the ground it covers is
+  drawn on the plan and in 3D. Pick a camera to see the house through its lens.
+- The demo apartment has a garden, a drive with a van on it and three cameras to try it on.
+
 ### Mac
 
 - **Open at Login**, in the menu bar icon's right-click menu and in the panel's gear menu: House Control starts with

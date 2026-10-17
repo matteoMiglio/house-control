@@ -74,6 +74,7 @@ Heights (`y`, `sill`, `head`) are metres above the floor. Angles are degrees.
 | `interiorWallHeight` | `1.25` | How much of the inner walls is drawn, so they do not hide the rooms |
 | `outdoorTemp` | `27` | Used to estimate the room temperature of an AC that has no sensor |
 | `camera.azimuth`, `camera.elevation` | `34`, `47` | Default view. Walls facing the camera are cut away, so the azimuth decides which side is open |
+| `roof` | `true` | `false` leaves the flat roof off in the view from outside, so the rooms show from above |
 
 ## `rooms`
 
@@ -142,6 +143,60 @@ Decoration only. Every piece has `type`, `pos` (`[x, z]` of its centre) and an o
 | `min`, `max` | Range of the target temperature. Defaults `16` and `30` |
 | `link`, `tuya` | Link to a real device — see below |
 | `sensor` | A thermometer for the room — see below |
+
+## The outside: `site` and `outdoor`
+
+The view from outside (the trees button in the panel, **Outside** in the editor's preview) shows the whole house
+on its plot. Both sections are optional: without them the house stands on a lawn a few metres wide.
+
+```jsonc
+"site": { "boundary": [[-4, -3], [15, -3], [15, 13.5], [-4, 13.5]], "ground": "grass" },
+"outdoor": [
+  { "type": "fence",    "from": [-4, -3], "to": [-4, 13.5] },
+  { "type": "gate",     "from": [10, 13.5], "to": [13.6, 13.5], "height": 1.5 },
+  { "type": "tree",     "pos": [-1.6, 10.8], "radius": 1.7, "height": 5.5 },
+  { "type": "building", "rect": [-3.2, -2.3, 2.4, 2], "height": 2.3 },
+  { "type": "paving",   "rect": [10.4, 3.6, 3.2, 9.9] },
+  { "type": "van",      "pos": [12, 8.6], "rot": 0 }
+]
+```
+
+| Field | Meaning |
+| --- | --- |
+| `site.boundary` | The property line: at least three `[x, z]` corners, in order |
+| `site.ground` | Inside the property line: `grass`, `gravel` or `concrete` |
+
+Every `outdoor` item has a `type` and an optional `height` in metres:
+
+| `type` | Shape | Default height |
+| --- | --- | --- |
+| `fence`, `wall`, `hedge`, `gate` | `from`, `to`: a line, at any angle | `1.8`, `2`, `1.6`, `1.8` |
+| `tree` | `pos` (`[x, z]` of the trunk), `radius` of the crown (default `1.5`) | `5` |
+| `car`, `van` | `pos` (`[x, z]` of its middle), `rot` (like furniture: `0` faces south), optional `color` | `1.5`, `2.3` |
+| `building` (a shed, a garage) | `rect`: `[x, z, width, depth]` | `2.6` |
+| `paving` (a drive, a terrace) | `rect` | — |
+
+## `cameras`
+
+Security cameras, for working out where to put them. Each one shows, from outside, the patch of ground it covers
+out to its `range`; pick one (in the panel, or in the editor) to see the house through its lens.
+
+```jsonc
+{ "id": "cam.door", "name": "Front door", "pos": [10.58, 3.9], "y": 2.4, "rot": 55, "tilt": 22, "fov": 104, "range": 12 }
+```
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `id`, `name` | | As for lights |
+| `pos` | | `[x, z]`. On a wall, just outside its outer face: the editor puts it there when you drop it close to one |
+| `y` | `2.5` | Height of the lens |
+| `rot` | `0` | Which way it looks, like furniture: `0` south (down the plan), `90` east, `180` north, `-90` west |
+| `tilt` | `25` | Degrees it looks down |
+| `fov` | `100` | Horizontal angle of view, from the spec sheet: about 100–110° for a 2.8 mm lens, 80–90° for 4 mm |
+| `resolution` | `[2560, 1440]` | Pixels across and down; the ratio sets the vertical angle of view |
+| `range` | `12` | How far out its view is drawn, in metres |
+
+The covered ground is drawn as if nothing stood in the way: walls, fences and trees do not block it yet.
 
 ## `scenes`
 

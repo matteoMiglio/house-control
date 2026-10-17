@@ -2,16 +2,17 @@
 import * as THREE from 'three';
 import { box, mat, at, floorMesh } from './kit.js';
 
-const EXT_T = 0.2;   // exterior wall thickness
+export const EXT_T = 0.2; // exterior wall thickness
 const INT_T = 0.1;   // interior wall thickness
 const CURB = 0.14;   // height of the cut-away walls on the camera side
+const DOOR_HEAD = 2.1; // top of a door, when the house is seen whole
 const EPS = 1e-4;
 
 const key = (v) => Math.round(v * 1000);
 
 // Splits every room edge into wall segments, classifying each as exterior / interior
 // and attaching the opening (door, window, ...) that covers it, if any.
-function wallSegments(config) {
+export function wallSegments(config) {
   const lines = new Map();
   const line = (axis, c) => {
     const k = `${axis}:${key(c)}`;
@@ -64,18 +65,23 @@ function wallSegments(config) {
   return segments;
 }
 
-export function buildHouse(config, camDir) {
+// `camDir`: the walls facing it are cut away and the inner ones drawn low, so the rooms can be
+// looked into. Without one the house is whole, as seen from outside (or by a camera inside it).
+export function buildHouse(config, camDir = null) {
   const group = new THREE.Group();
   const floors = [];
+  const whole = !camDir;
   const H = config.wallHeight;
-  const Hi = Math.min(config.interiorWallHeight, H);
+  const Hi = whole ? H : Math.min(config.interiorWallHeight, H);
   const { minX, minZ, maxX, maxZ } = config.bounds;
 
-  // Plinth the model stands on.
-  const plinth = box(maxX - minX + 0.7, 0.3, maxZ - minZ + 0.7, mat('#141927', { rough: 0.9 }), { r: 0.12 });
-  at(plinth, (minX + maxX) / 2, -0.305, (minZ + maxZ) / 2);
-  plinth.receiveShadow = true;
-  group.add(plinth);
+  // Plinth the model stands on; outside, the ground does that.
+  if (!whole) {
+    const plinth = box(maxX - minX + 0.7, 0.3, maxZ - minZ + 0.7, mat('#141927', { rough: 0.9 }), { r: 0.12 });
+    at(plinth, (minX + maxX) / 2, -0.305, (minZ + maxZ) / 2);
+    plinth.receiveShadow = true;
+    group.add(plinth);
+  }
 
   for (const room of config.rooms) {
     const floor = floorMesh(room, room.floor);
@@ -93,6 +99,7 @@ export function buildHouse(config, camDir) {
     emissive: '#3d5fae', emissiveIntensity: 0.5,
   });
   const frame = mat('#2c3142', { rough: 0.6 });
+  const door = mat('#5b4636', { rough: 0.7 });
 
   // A wall piece running from a..b along its axis, between heights y0..y1.
   const piece = (s, a, b, y0, y1, t, materials = wallMats) => {
@@ -112,7 +119,7 @@ export function buildHouse(config, camDir) {
     // Outward normal of an exterior wall points away from its room.
     const nx = s.axis === 'z' ? -s.inside : 0;
     const nz = s.axis === 'x' ? -s.inside : 0;
-    const near = exterior && nx * camDir.x + nz * camDir.z > 0.15;
+    const near = !whole && exterior && nx * camDir.x + nz * camDir.z > 0.15;
     const a = s.a - (s.freeA ? EXT_T / 2 : 0);
     const b = s.b + (s.freeB ? EXT_T / 2 : 0);
     const type = s.opening?.type;
@@ -121,7 +128,13 @@ export function buildHouse(config, camDir) {
       if (type !== 'door') piece(s, a, b, 0, CURB, t);
       continue;
     }
-    if (type === 'door' || type === 'open') continue;
+    if (type === 'door' || type === 'open') {
+      if (!whole) continue;
+      // Seen whole, a doorway has a lintel over it, and a door to the outside is shut.
+      if (H > DOOR_HEAD) piece(s, a, b, DOOR_HEAD, H, t);
+      if (type === 'door' && exterior) piece(s, s.a, s.b, 0, Math.min(DOOR_HEAD, H), 0.06, door);
+      continue;
+    }
 
     const height = exterior ? H : Hi;
     if (type === 'window' && exterior) {

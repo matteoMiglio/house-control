@@ -425,3 +425,50 @@ html.ios.mode-editor body { background: var(--bg); }
 @media (prefers-reduced-motion: reduce) {
   .p-sheet, .p-modal, .editor.phone .canvas, .p-scrim { transition-duration: 1ms; }
 }
+
+/* ---------- outside: property line, fences, trees, cameras ---------- */
+
+.chips { position: absolute; right: 10px; top: 10px; display: flex; gap: 6px; }
+.chips .chip { position: static; }
+.chip[hidden] { display: none; }
+.p-preview .chips { top: 12px; right: 12px; }
+
+.p-site { fill: rgba(110, 160, 90, 0.07); stroke: #b9d99a; stroke-width: 0.06; stroke-dasharray: 0.3 0.18; pointer-events: stroke; cursor: pointer; }
+.p-site.sel { stroke: #6aa6ff; stroke-width: 0.09; fill: rgba(110, 160, 90, 0.12); cursor: move; }
+.p-site-hit { fill: none; }
+.p-handle.corner, .p-handle.end { cursor: move; }
+.p-handle.aim { fill: var(--cam, #6aa6ff); cursor: grab; }
+
+.p-out { cursor: move; }
+line.p-out { stroke-linecap: round; }
+line.p-out.fence { stroke: #a08a6c; stroke-width: 0.09; stroke-dasharray: 0.08 0.1; stroke-linecap: butt; }
+line.p-out.wall { stroke: #c4bcad; stroke-width: 0.22; stroke-linecap: square; }
+line.p-out.hedge { stroke: #4f8a43; stroke-width: 0.6; opacity: 0.85; }
+line.p-out.gate { stroke: #9aa3b5; stroke-width: 0.14; stroke-linecap: butt; }
+line.p-out.sel { filter: drop-shadow(0 0 0.1px #fff); stroke: #6aa6ff; }
+g.p-out circle { fill: rgba(80, 140, 66, 0.32); stroke: #6fae5c; stroke-width: 0.04; }
+g.p-out .trunk { fill: #6b5340; stroke: none; }
+g.p-out.sel circle:not(.trunk) { stroke: #6aa6ff; stroke-width: 0.08; }
+rect.p-out.building { fill: #3a3f4b; stroke: #c9ccd4; stroke-width: 0.06; }
+rect.p-out.paving { fill: rgba(190, 190, 180, 0.13); stroke: rgba(220, 220, 210, 0.35); stroke-width: 0.03; stroke-dasharray: 0.12 0.1; }
+rect.p-out.sel { stroke: #6aa6ff; stroke-width: 0.09; }
+
+.p-cam-view { fill: var(--cam); fill-opacity: 0.1; stroke: var(--cam); stroke-opacity: 0.5; stroke-width: 0.03; pointer-events: none; }
+.p-cam-view.sel { fill-opacity: 0.2; stroke-opacity: 0.95; stroke-width: 0.05; }
+.p-cam { cursor: move; }
+.p-cam .ring { fill: rgba(10, 14, 26, 0.72); stroke: var(--cam); stroke-width: 0.04; }
+.p-cam rect { fill: #eef0f2; stroke: #0a0e1a; stroke-width: 0.025; }
+.p-cam .lens { fill: #11141b; stroke: var(--cam); stroke-width: 0.03; }
+.p-cam.sel .ring { stroke: #fff; stroke-width: 0.07; }
+.p-aim-line { stroke: rgba(255, 255, 255, 0.5); stroke-width: 0.025; stroke-dasharray: 0.06 0.06; pointer-events: none; }
+.editor.phone .p-cam, .editor.phone .p-out, .editor.phone .p-site { cursor: default; }
+
+.corner-row { display: grid; grid-template-columns: 18px 1fr 26px; gap: 8px; align-items: end; }
+.corner-n { padding-bottom: 9px; font-size: 11px; font-weight: 700; color: var(--faint); text-align: center; }
+.del-corner { height: 30px; margin-bottom: 1px; border-radius: 8px; display: grid; place-items: center; color: var(--faint); }
+.del-corner:hover:not(:disabled) { color: #ff8a80; background: rgba(255, 255, 255, 0.06); }
+.del-corner:disabled { opacity: 0.3; }
+g.p-out.car rect, g.p-out.van rect { fill: #4a6488; stroke: #dfe5f0; stroke-width: 0.05; }
+g.p-out.van rect { fill: #d9dde3; stroke: #8b93a7; }
+g.p-out .front { stroke: rgba(10, 14, 26, 0.75); stroke-width: 0.12; stroke-linecap: round; fill: none; pointer-events: none; }
+g.p-out.sel rect { stroke: #6aa6ff; stroke-width: 0.1; }

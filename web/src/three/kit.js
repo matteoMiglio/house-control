@@ -58,7 +58,7 @@ export function rng(seed) {
 
 const TILE = 2.4; // metres covered by one texture repeat
 
-function canvasTexture(size, draw) {
+export function canvasTexture(size, draw) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   draw(c.getContext('2d'), size);
@@ -69,7 +69,7 @@ function canvasTexture(size, draw) {
   return tex;
 }
 
-function shade(hex, amount) {
+export function shade(hex, amount) {
   const c = new THREE.Color(hex);
   const hsl = {};
   c.getHSL(hsl);

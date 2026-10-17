@@ -43,6 +43,9 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
   const tooltip = h('div.tooltip');
   const homeSub = h('div.home-sub');
   const power = h('button.round.power', { title: 'Everything on / off', 'aria-label': 'Toggle everything', onclick: toggleEverything }, icon('power', 21, 2.2));
+  // Inside: the rooms, cut open. Outside: the whole house on its site, with its security cameras.
+  // On a phone the header has no room for it: it floats in the corner of the 3D view instead.
+  const viewBtn = h(`button.round${isPhone ? '.stage-btn' : ''}`, { onclick: () => setOutside(!world?.outside) });
   const gear = h('button.round', { title: 'Floor plan', 'aria-label': 'Floor plan menu', onclick: () => onMenu(gear) }, icon('settings', 17));
   // Shown while an AI assistant has a link to this home (AI Access on the Mac).
   const aiBadge = h('button.ai-badge', { hidden: true, title: 'An AI assistant has access — click to manage', 'aria-label': 'AI access',
@@ -68,8 +71,8 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     h('header.top',
       h('div.home', h('div.home-badge', icon('home', 17)),
         h('div', h('div.home-name', config.name), homeSub)),
-      aiBadge, gear, power),
-    tooltip, panel, sheet, toastEl);
+      aiBadge, isPhone ? null : viewBtn, gear, power),
+    isPhone ? viewBtn : null, tooltip, panel, sheet, toastEl);
   const card = h('div.card.booting', h('div.notch'), clip);
   root.replaceChildren(card);
 
@@ -91,6 +94,19 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     const b = h('button.room', { onclick: () => { haptic('tick'); selectRoom(r.id); } }, r.name, count);
     roomButtons.set(r.id, { b, count });
     rooms.append(b);
+  }
+
+  function setOutside(on) {
+    haptic('light');
+    world?.setOutside(on);
+    showView(on);
+  }
+
+  function showView(on) {
+    viewBtn.replaceChildren(icon(on ? 'door' : 'trees', 17));
+    viewBtn.title = on ? 'Inside: the rooms' : 'Outside: the house and its cameras';
+    viewBtn.setAttribute('aria-label', viewBtn.title);
+    viewBtn.classList.toggle('active', on);
   }
 
   function selectRoom(id) {
@@ -270,7 +286,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
 
   function openSheet(target) {
     ui.sheet = target;
-    sheetView = target.kind === 'ac' ? acSheet(target.id) : lightSheet(target.id);
+    sheetView = target.kind === 'ac' ? acSheet(target.id) : target.kind === 'camera' ? cameraSheet(target.id) : lightSheet(target.id);
     sheet.replaceChildren(...sheetView.nodes);
     panel.classList.add('hidden');
     sheet.classList.remove('hidden');
@@ -278,7 +294,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     sheet.inert = false;
     card.classList.add('detail');
     hideTooltip();
-    onFocus(target.kind === 'ac' ? target : { kind: 'room', id: store.lightCfg.get(target.id).room });
+    onFocus(target.kind === 'light' ? { kind: 'room', id: store.lightCfg.get(target.id).room } : target);
     update();
   }
 
@@ -403,6 +419,23 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     };
   }
 
+  // A security camera: the stage shows what it sees; its numbers are below.
+  function cameraSheet(id) {
+    const cfg = config.cameras.find((c) => c.id === id);
+    const fact = (label, value) => h('div.cam-fact', h('span', label), h('b', value));
+    const nodes = [
+      sheetHead(cfg.name, h('div.sheet-sub', 'Security camera · ', h('b', 'View'))),
+      h('div.cam-facts',
+        fact('Angle of view', `${cfg.fov}°`),
+        fact('Range', `${cfg.range} m`),
+        fact('Mounted at', `${cfg.y} m`),
+        fact('Tilted down', `${cfg.tilt}°`)),
+      h('div.sheet-note', icon('cctv', 20),
+        `Roughly what this camera sees: the dimmed part is outside its picture. Move or aim it in Edit Home.`),
+    ];
+    return { nodes, update() {} };
+  }
+
   function lightSheet(id) {
     const cfg = store.lightCfg.get(id);
     const s = () => state.lights[id];
@@ -473,7 +506,10 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     let status;
     let on;
     let color;
-    if (hit.kind === 'light') {
+    if (hit.kind === 'camera') {
+      const cfg = config.cameras.find((c) => c.id === hit.id);
+      name = cfg.name; status = `${cfg.fov}° · ${cfg.range} m`; on = true; color = '#7fd3ff';
+    } else if (hit.kind === 'light') {
       const cfg = store.lightCfg.get(hit.id);
       const s = state.lights[hit.id];
       name = cfg.name; status = lightStatus(cfg, s); on = s.on; color = css(lightColor(s, tmp));
@@ -556,7 +592,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
   return {
     canvas,
     card,
-    attach(w) { world = w; card.classList.remove('booting'); },
+    attach(w) { world = w; card.classList.remove('booting'); showView(w.outside); },
     showTooltip,
     openSheet,
     closeSheet,

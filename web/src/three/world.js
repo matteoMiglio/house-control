@@ -4,7 +4,10 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { buildHouse } from './house.js';
+import { buildSite } from './site.js';
+import { CameraUnit, cameraColor, cameraQuaternion, halfAngles } from './cctv.js';
 import { buildFurniture } from './furniture.js';
 import { LightUnit } from './lights.js';
 import { ACUnit } from './ac.js';
@@ -18,8 +21,31 @@ const EL_MIN = 26;
 const EL_MAX = 70;
 const ZOOM_MIN = 0.55;     // closest
 const ZOOM_MAX = 1.2;
+// Outside, the house can be walked around and looked at from close to the ground.
+const OUT_EL_MIN = 6;
+const OUT_EL_MAX = 84;
+const OUT_EL = 28;
+const OUT_ZOOM_MIN = 0.3;
+const OUT_ZOOM_MAX = 1.6;
 
-export function createWorld(canvas, config, store, { onHover, onPick, background = STAGE_BG }) {
+// Seen through a security camera: what lies outside its picture is dimmed and the edge drawn.
+const PictureFrame = {
+  uniforms: { tDiffuse: { value: null }, rect: { value: new THREE.Vector4(0, 0, 1, 1) }, res: { value: new THREE.Vector2(1, 1) } },
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform vec4 rect; uniform vec2 res; varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      vec2 p = vUv * res; vec2 lo = rect.xy * res; vec2 hi = rect.zw * res;
+      float inside = step(lo.x, p.x) * step(p.x, hi.x) * step(lo.y, p.y) * step(p.y, hi.y);
+      float d = min(min(p.x - lo.x, hi.x - p.x), min(p.y - lo.y, hi.y - p.y));
+      c.rgb = mix(c.rgb * 0.05, c.rgb, inside); // linear light: this is about a quarter as bright on screen
+      c.rgb = mix(c.rgb, vec3(1.0), inside * (1.0 - smoothstep(0.0, 2.0, d)) * 0.6);
+      gl_FragColor = c;
+    }`,
+};
+
+export function createWorld(canvas, config, store, { onHover, onPick, background = STAGE_BG, outside: startOutside = false }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -37,14 +63,23 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
   const H = config.wallHeight;
   const center = new THREE.Vector3((minX + maxX) / 2, 0, (minZ + maxZ) / 2);
   const span = Math.max(maxX - minX, maxZ - minZ);
+  const sb = config.siteBounds;
+  const siteCenter = new THREE.Vector3((sb.minX + sb.maxX) / 2, 0, (sb.minZ + sb.maxZ) / 2);
+  const siteSpan = Math.max(sb.maxX - sb.minX, sb.maxZ - sb.minZ, span);
+  // A big plot is framed from far away: the far end of it must not be clipped.
+  camera.far = Math.max(120, siteSpan * 8);
 
   const baseAz = config.camera.azimuth;
   const camDir = new THREE.Vector3(Math.sin(rad(baseAz)), 0, Math.cos(rad(baseAz)));
 
   /* ---------- content ---------- */
 
-  const house = buildHouse(config, camDir);
-  scene.add(house.group);
+  // The house is built one of two ways: cut open to look into the rooms, or whole, standing on
+  // its site, for the view from outside and through a security camera.
+  let outside = false;
+  let pov = null; // the id of the camera looked through
+  let house = null;
+  let site = null;
   scene.add(buildFurniture(config.furniture));
 
   const lights = new Map();
@@ -59,10 +94,20 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     acs.set(cfg.id, unit);
     scene.add(unit.group);
   }
-  const hitTargets = [...[...lights.values()].map((u) => u.hit), ...[...acs.values()].map((u) => u.hit), ...house.floors];
+  const cameras = new Map();
+  config.cameras.forEach((cfg, i) => {
+    const unit = new CameraUnit(cfg, cameraColor(i));
+    cameras.set(cfg.id, unit);
+    scene.add(unit.group, unit.view);
+  });
+  // Cut open, the model has no ground around it: only cameras on the house itself are shown.
+  const onHouse = (cfg) => cfg.pos[0] > minX - 0.4 && cfg.pos[0] < maxX + 0.4 && cfg.pos[1] > minZ - 0.4 && cfg.pos[1] < maxZ + 0.4;
+  let hitTargets = [];
 
   // Night-time ambience: enough to read the model with every lamp off.
-  scene.add(new THREE.HemisphereLight(0x8ea6ff, 0x0b0e17, 0.42));
+  const night = new THREE.Group();
+  scene.add(night);
+  night.add(new THREE.HemisphereLight(0x8ea6ff, 0x0b0e17, 0.42));
   const moon = new THREE.DirectionalLight(0xa9c0ff, 0.6);
   // Steep and coming from the viewer's side, so the faces we look at stay readable.
   moon.position.copy(center).add(new THREE.Vector3(camDir.x * 3.2 + 1.5, 10, camDir.z * 3.2 - 1.5));
@@ -77,15 +122,42 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
   moon.shadow.bias = -0.0008;
   moon.shadow.normalBias = 0.04;
   moon.shadow.radius = 4;
-  scene.add(moon, moon.target);
+  night.add(moon, moon.target);
+
+  // Outside it is day: a soft sky and a low sun, so façades and the garden read clearly.
+  const day = new THREE.Group();
+  day.visible = false;
+  scene.add(day);
+  day.add(new THREE.HemisphereLight(0xd6e4ff, 0x3a4630, 1.15));
+  const sun = new THREE.DirectionalLight(0xfff0dc, 2.1);
+  sun.position.copy(siteCenter).add(new THREE.Vector3(siteSpan * 0.45, siteSpan * 0.7 + 8, siteSpan * 0.3));
+  sun.target.position.copy(siteCenter);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  const ssc = sun.shadow.camera;
+  ssc.left = ssc.bottom = -siteSpan * 0.75 - 4;
+  ssc.right = ssc.top = siteSpan * 0.75 + 4;
+  ssc.near = 1;
+  ssc.far = siteSpan * 3 + 30;
+  sun.shadow.bias = -0.0006;
+  sun.shadow.normalBias = 0.04;
+  day.add(sun, sun.target);
+  const fog = new THREE.Fog(background, siteSpan * 2.2, siteSpan * 5 + 20);
+
+  const povCamera = new THREE.PerspectiveCamera(60, 1, 0.05, 250);
+  const flip = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI); // cameras look down -z
 
   /* ---------- post-processing ---------- */
 
   const target = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 });
   const composer = new EffectComposer(renderer, target);
-  composer.addPass(new RenderPass(scene, camera));
+  const renderPass = new RenderPass(scene, camera);
+  composer.addPass(renderPass);
   const bloom = new UnrealBloomPass(new THREE.Vector2(4, 4), 0.34, 0.5, 1.0);
   composer.addPass(bloom);
+  const frame = new ShaderPass(PictureFrame);
+  frame.enabled = false;
+  composer.addPass(frame);
   composer.addPass(new OutputPass());
 
   /* ---------- camera rig ---------- */
@@ -144,6 +216,12 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
       box = new THREE.Box3().setFromCenterAndSize(
         new THREE.Vector3(p.x + out.x * 1.3, 1.25, p.z + out.z * 1.3), new THREE.Vector3(3.6, 2.6, 3.6));
       fill = 0.92;
+    } else if (f?.kind === 'camera' && cameras.has(f.id)) {
+      const unit = cameras.get(f.id);
+      box = new THREE.Box3().setFromPoints([unit.eye(), ...unit.ground.map(([x, z]) => new THREE.Vector3(x, 0, z))]);
+      fill = 0.9;
+    } else if (outside) {
+      box = new THREE.Box3(new THREE.Vector3(sb.minX, 0, sb.minZ), new THREE.Vector3(sb.maxX, H, sb.maxZ));
     } else {
       box = new THREE.Box3(new THREE.Vector3(minX, 0, minZ), new THREE.Vector3(maxX, H * 0.8, maxZ));
     }
@@ -169,6 +247,91 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
   }
 
   /* ---------- state sync ---------- */
+
+  /* ---------- inside / outside ---------- */
+
+  function buildShell() {
+    const whole = outside || Boolean(pov);
+    if (house && house.whole === whole) return;
+    if (house) {
+      scene.remove(house.group);
+      house.group.traverse((o) => o.geometry?.dispose());
+    }
+    house = { ...buildHouse(config, whole ? null : camDir), whole };
+    scene.add(house.group);
+    if (whole && !site) {
+      site = buildSite(config);
+      scene.add(site.group, site.roof);
+    }
+    if (site) site.group.visible = site.roof.visible = whole;
+    night.visible = !whole;
+    day.visible = whole;
+    scene.fog = whole ? fog : null;
+    shadowFrames = 3;
+  }
+
+  function showCameras() {
+    for (const unit of cameras.values()) {
+      unit.group.visible = unit.id !== pov && (outside || onHouse(unit.cfg));
+      unit.view.visible = outside && !pov;
+    }
+    // Under the roof the rooms and their devices cannot be seen, so they cannot be picked either.
+    const indoors = house.whole && config.roof ? [] : [...[...lights.values()].map((u) => u.hit), ...[...acs.values()].map((u) => u.hit), ...house.floors];
+    hitTargets = [...[...cameras.values()].filter((u) => u.group.visible).map((u) => u.hit), ...indoors];
+  }
+
+  // The picture of the camera looked through, fitted into the part of the stage that is not covered.
+  function aimPOV() {
+    const unit = cameras.get(pov);
+    if (!unit) return;
+    const { h: ha, v: va } = halfAngles(unit.cfg);
+    const aspect = Math.tan(ha) / Math.tan(va);
+    const usable = Math.max(40, height - topInset - bottomInset);
+    let w = width * 0.94;
+    let hh = w / aspect;
+    if (hh > usable * 0.92) { hh = usable * 0.92; w = hh * aspect; }
+    povCamera.aspect = width / height;
+    povCamera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(va) * height / hh));
+    povCamera.setViewOffset(width, height, 0, -(topInset - bottomInset) / 2, width, height);
+    povCamera.updateProjectionMatrix();
+    unit.eye(povCamera.position);
+    cameraQuaternion(unit.cfg, povCamera.quaternion).multiply(flip);
+    const cy = topInset + usable / 2;
+    frame.uniforms.rect.value.set((width - w) / 2 / width, 1 - (cy + hh / 2) / height, (width + w) / 2 / width, 1 - (cy - hh / 2) / height);
+    const pr = renderer.getPixelRatio();
+    frame.uniforms.res.value.set(width * pr, height * pr);
+  }
+
+  function setPov(id) {
+    const next = id && cameras.has(id) ? id : null;
+    if (next === pov) return;
+    pov = next;
+    buildShell();
+    showCameras();
+    renderPass.camera = pov ? povCamera : camera;
+    frame.enabled = Boolean(pov);
+    if (pov) { setHover(null); aimPOV(); }
+    wake(3);
+  }
+
+  function setOutside(on) {
+    if (on === outside) return;
+    outside = on;
+    buildShell();
+    showCameras();
+    rig.zoom = 1;
+    rig.focus = null;
+    if (outside) {
+      rig.goal.el = OUT_EL;
+    } else {
+      // Back inside the orbit is fenced in again: come back round the short way.
+      rig.az = baseAz + ((((rig.az - baseAz) % 360) + 540) % 360) - 180;
+      rig.goal.az = baseAz;
+      rig.goal.el = config.camera.elevation;
+    }
+    frameGoal();
+    wake(3);
+  }
 
   function syncAll(opts = {}) {
     let i = 0;
@@ -206,7 +369,7 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
   }
 
   function unitOf(t) {
-    return t?.kind === 'light' ? lights.get(t.id) : t?.kind === 'ac' ? acs.get(t.id) : null;
+    return t?.kind === 'light' ? lights.get(t.id) : t?.kind === 'ac' ? acs.get(t.id) : t?.kind === 'camera' ? cameras.get(t.id) : null;
   }
 
   function screenAnchor(t) {
@@ -238,6 +401,7 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
   };
 
   canvas.addEventListener('pointerdown', (ev) => {
+    if (pov) return; // a camera's picture holds still
     canvas.setPointerCapture(ev.pointerId);
     fingers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
     if (fingers.size === 2) {
@@ -253,7 +417,7 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     if (fingers.has(ev.pointerId)) fingers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
     if (pinch) {
       if (fingers.size >= 2) {
-        rig.zoom = clamp(pinch.zoom * pinch.spread / spread(), ZOOM_MIN, ZOOM_MAX);
+        rig.zoom = clampZoom(pinch.zoom * pinch.spread / spread());
         frameGoal();
         wake();
       }
@@ -264,14 +428,14 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
       const dy = ev.clientY - drag.y;
       if (!drag.moved && Math.hypot(dx, dy) > 5) { drag.moved = true; setHover(null); canvas.style.cursor = 'grabbing'; }
       if (drag.moved) {
-        rig.goal.az = clamp(drag.az - dx * 0.35, baseAz - ORBIT_AZ, baseAz + ORBIT_AZ);
-        rig.goal.el = clamp(drag.el + dy * 0.3, EL_MIN, EL_MAX);
+        rig.goal.az = outside ? drag.az - dx * 0.35 : clamp(drag.az - dx * 0.35, baseAz - ORBIT_AZ, baseAz + ORBIT_AZ);
+        rig.goal.el = outside ? clamp(drag.el + dy * 0.3, OUT_EL_MIN, OUT_EL_MAX) : clamp(drag.el + dy * 0.3, EL_MIN, EL_MAX);
         frameGoal();
         wake();
       }
       return;
     }
-    setHover(pick(ev));
+    if (!pov) setHover(pick(ev));
   });
   const release = (ev) => {
     fingers.delete(ev.pointerId);
@@ -294,9 +458,11 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     drag = null;
   });
   canvas.addEventListener('pointerleave', () => { if (!drag) setHover(null); });
+  const clampZoom = (z) => (outside ? clamp(z, OUT_ZOOM_MIN, OUT_ZOOM_MAX) : clamp(z, ZOOM_MIN, ZOOM_MAX));
   canvas.addEventListener('wheel', (ev) => {
     ev.preventDefault();
-    rig.zoom = clamp(rig.zoom * Math.exp(ev.deltaY * 0.0015), ZOOM_MIN, ZOOM_MAX);
+    if (pov) return;
+    rig.zoom = clampZoom(rig.zoom * Math.exp(ev.deltaY * 0.0015));
     frameGoal();
     wake();
   }, { passive: false });
@@ -312,23 +478,24 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
 
   function wake(frames = 2) {
     awake = Math.max(awake, frames);
-    if (running && !raf) { last = performance.now(); raf = requestAnimationFrame(frame); }
+    if (running && !raf) { last = performance.now(); raf = requestAnimationFrame(tick); }
   }
 
-  function frame(now) {
+  function tick(now) {
     raf = 0;
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     let active = updateRig(dt);
     for (const unit of lights.values()) active = unit.update(dt) || active;
     for (const unit of acs.values()) active = unit.update(dt) || active;
+    for (const unit of cameras.values()) active = unit.update(dt) || active;
     if (shadowFrames > 0) { renderer.shadowMap.needsUpdate = true; shadowFrames--; active = true; }
     if (active || awake > 0) {
       composer.render(dt);
       awake = Math.max(0, awake - 1);
       if (hovered && active) onHover({ ...hovered, ...screenAnchor(hovered) });
     }
-    if (running && (active || awake > 0)) raf = requestAnimationFrame(frame);
+    if (running && (active || awake > 0)) raf = requestAnimationFrame(tick);
   }
 
   function resize() {
@@ -345,6 +512,7 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     // Centre the model between header and panel by shifting the projection window.
     camera.setViewOffset(width, height, 0, -(topInset - bottomInset) / 2, width, height);
     camera.updateProjectionMatrix();
+    aimPOV();
     frameGoal();
     wake(3);
   }
@@ -352,15 +520,27 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
   const world = {
     lights,
     acs,
+    cameras,
+
+    get outside() { return outside; },
+    /** The whole house on its site, seen from outside — or cut open to look into the rooms. */
+    setOutside,
+    get pov() { return pov; },
+    /** Shows the picture of a security camera, or (null) the model again. */
+    lookThrough: setPov,
 
     setInsets(top, bottom) { topInset = top; bottomInset = bottom; resize(); },
     resize,
 
     focus(next) {
+      if (next?.kind === 'camera') { setPov(next.id); return; }
+      setPov(null);
       rig.focus = next;
       rig.zoom = 1;
-      rig.goal.az = baseAz + (next?.kind === 'ac' ? (WALL_SIDE[acs.get(next.id).cfg.wall] ?? 0) : 0);
-      rig.goal.el = next?.kind === 'ac' ? 30 : config.camera.elevation;
+      if (!outside) {
+        rig.goal.az = baseAz + (next?.kind === 'ac' ? (WALL_SIDE[acs.get(next.id).cfg.wall] ?? 0) : 0);
+        rig.goal.el = next?.kind === 'ac' ? 30 : config.camera.elevation;
+      }
       frameGoal();
       wake();
     },
@@ -387,6 +567,7 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
 
     dispose() {
       unsubscribe();
+      for (const unit of cameras.values()) unit.dispose();
       running = false;
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
@@ -402,12 +583,16 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
         updateRig(0.05);
         for (const unit of lights.values()) unit.update(0.05);
         for (const unit of acs.values()) unit.update(0.05);
+        for (const unit of cameras.values()) unit.update(0.05);
       }
       renderer.shadowMap.needsUpdate = true;
       composer.render(0);
     },
   };
 
+  buildShell();
+  showCameras();
+  if (startOutside) setOutside(true);
   syncAll({ instant: true });
   resize();
   updateRig(0, true);

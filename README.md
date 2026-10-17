@@ -28,6 +28,9 @@
 - **Air conditioners.** Power, target temperature, mode and fan speed, with the room temperature from a real sensor if you have one.
 - **Scenes.** One tap sets every light and AC — "Cozy", "Movie", "Night", or your own.
 - **A visual editor.** Draw the rooms, drop in furniture, place lamps and ACs, and link each one to a real device.
+- **The view from outside, for planning security cameras.** The whole house on its plot — property line, fences,
+  gates, trees, sheds, the drive and the cars on it. Hang cameras on the walls, see the ground each one covers, and look through its
+  lens before you drill. See [the floor plan file](docs/floor-plan.md#cameras).
 - **Your devices, wherever they live.** Smart Life / Tuya, Home Assistant (and the thousands of brands it runs),
   Philips Hue and Apple Home — mixed freely in one home. See [Connect real devices](#connect-real-devices).
 - **An island around the notch.** Rest the pointer on the MacBook's notch and a small live model of the home drops
@@ -134,6 +137,8 @@ There is no Dock icon and no main window: look for the house in the menu bar.
 | Click the sliders icon on a light tile | Brightness, white temperature, colour |
 | Click an AC, or its tile | Open its sheet: temperature, mode, fan speed |
 | Click a room | Zoom in on it and list only its devices |
+| Click the trees button (on the iPhone, in the corner of the 3D view) | See the house from outside, with its cameras; click it again to go back inside |
+| Click a security camera, outside | See through it |
 | Drag the 3D view / scroll over it | Rotate / zoom |
 | `Esc` | Back, then close |
 
