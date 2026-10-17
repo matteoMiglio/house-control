@@ -5,8 +5,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = AppModel()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
-        // Menu bar only: HOUSE_DOCK=1 shows a Dock icon for UI automation.
-        NSApp.setActivationPolicy(ProcessInfo.processInfo.environment["HOUSE_DOCK"] != nil ? .regular : .accessory)
+        NSApp.setActivationPolicy(.regular)
+        // Started by macOS as a login item: the app comes up in the menu bar only.
+        let event = NSAppleEventManager.shared().currentAppleEvent
+        model.launchedAtLogin = event?.eventID == kAEOpenApplication
+            && event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
+    }
+
+    /// A click on the Dock icon (or opening the app again) brings the window back.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        model.router.show(.home)
+        return true
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

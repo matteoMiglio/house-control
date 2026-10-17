@@ -8,6 +8,9 @@ private final class FloatingPanel: NSPanel {
 
 /// The borderless popover under the menu bar icon. The web content draws the card
 /// (rounded corners, notch, shadow) itself on a fully transparent window.
+///
+/// The page is shared with the main window: the panel takes it back each time it opens, and
+/// gives it up (see `onHidden`) once it has faded out.
 final class PanelController: NSObject, NSWindowDelegate {
     private static let card = NSSize(width: 440, height: 800)
     // Transparent margin around the card, matching `html.native #app` padding in style.css.
@@ -19,6 +22,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     private(set) var isVisible = false
     private var lastHide = Date.distantPast
     var onVisibilityChange: ((Bool) -> Void)?
+    /// After the panel has faded out and told the page it is hidden: the page is free to go elsewhere.
+    var onHidden: (() -> Void)?
     /// Keeps the panel open when it loses focus (HOUSE_PIN=1, for UI automation and screenshots).
     private let pinned = ProcessInfo.processInfo.environment["HOUSE_PIN"] != nil
 
@@ -62,6 +67,12 @@ final class PanelController: NSObject, NSWindowDelegate {
         let y = anchor.minY - size.height + 3
         window.setFrame(NSRect(x: x.rounded(), y: y.rounded(), width: size.width, height: size.height), display: true)
 
+        // The page may have been lent to the main window since the panel last showed it.
+        if window.contentView !== host.webView {
+            host.webView.removeFromSuperview()
+            window.contentView = host.webView
+        }
+        host.call("setChrome", "menubar")
         host.call("setNotch", Double(anchor.midX - x - Self.padSide))
         host.call("shown")
 
@@ -86,14 +97,19 @@ final class PanelController: NSObject, NSWindowDelegate {
         lastHide = Date()
         if let monitor = outsideClickMonitor { NSEvent.removeMonitor(monitor) }
         outsideClickMonitor = nil
+        // The fade's completion does not come while the display sleeps (nothing animates then),
+        // so a timer finishes the job too: whichever comes first, once.
+        let finish = { [weak self] in
+            guard let self, !self.isVisible, self.window.isVisible else { return }
+            self.window.orderOut(nil)
+            self.host.call("hidden")
+            self.onHidden?()
+        }
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.12
             window.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            guard let self, !self.isVisible else { return }
-            self.window.orderOut(nil)
-            self.host.call("hidden")
-        })
+        }, completionHandler: finish)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: finish)
         onVisibilityChange?(false)
     }
 

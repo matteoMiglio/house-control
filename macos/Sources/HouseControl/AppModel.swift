@@ -57,6 +57,15 @@ final class AppModel: NSObject {
     var loginState: LoginItem.State = .off
     var connectedDevices: [String] = []
     var islandShown = false
+    /// The main window's sidebar.
+    var section: MainSection = .home
+    /// The home's name, for the main window's title.
+    var homeName = "Home"
+    /// Set by the delegate when macOS started the app as a login item: no window opens then.
+    @ObservationIgnored var launchedAtLogin = false
+    @ObservationIgnored var mainWindow: MainWindowController?
+    @ObservationIgnored weak var homeSlot: WebSlotView?
+    @ObservationIgnored var primaryPlace: PrimaryPlace = .none
 
     enum HostRole: CaseIterable { case primary, editor, agent, island }
     @ObservationIgnored var hosts: [HostRole: WebHost] = [:]
@@ -72,7 +81,8 @@ final class AppModel: NSObject {
         let router = WindowRouter { [weak self] destination in
             guard let self else { return }
             switch destination {
-            case .home: self.togglePanel()
+            case .home: self.showMainWindow(.home)
+            case .panel: if !self.panel.isVisible { self.togglePanel() }
             case .editor(let section): self.openEditor(section: section)
             case .agent: self.openAgent()
             case .pairing: self.pairPhone()
@@ -99,6 +109,10 @@ final class AppModel: NSObject {
         hosts[.primary] = host
         panel = PanelController(host: host)
         panel.onVisibilityChange = { [weak self] visible in self?.setPolling(visible) }
+        panel.onHidden = { [weak self] in
+            self?.primaryPlace = .none
+            self?.placePrimary()
+        }
         hub.onStale = { [weak self] in self?.poll() }
         widgets.onActions = { [weak self] run, adopt in
             guard let self else { return }
@@ -120,7 +134,13 @@ final class AppModel: NSObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.hosts[.primary]?.snapshot(to: directory.appendingPathComponent("panel.png"))
                 self?.hosts[.island]?.snapshot(to: directory.appendingPathComponent("island.png"))
+                self?.mainWindow?.snapshot(to: directory.appendingPathComponent("main.png"), page: self?.homeSlot)
             }
+        }
+        // Opened by hand, the app shows its window; started at login it stays in the menu bar.
+        // (HOUSE_NO_WINDOW=1 does the same for scripted runs.)
+        if !launchedAtLogin, ProcessInfo.processInfo.environment["HOUSE_NO_WINDOW"] == nil {
+            router.show(.home)
         }
         if ProcessInfo.processInfo.environment["HOUSE_OPEN_PAIRING"] != nil {
             router.show(.pairing)
@@ -134,7 +154,7 @@ final class AppModel: NSObject {
             }
         }
         if ProcessInfo.processInfo.environment["HOUSE_OPEN_ON_LAUNCH"] != nil {
-            router.show(.home)
+            router.show(.panel)
         }
     }
 
@@ -144,7 +164,7 @@ final class AppModel: NSObject {
         let device = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "device" })?.value
         router.whenReady { [weak self] in
             guard let self else { return }
-            if !self.panel.isVisible { self.router.show(.home) }
+            if !self.panel.isVisible { self.router.show(.panel) }
             if let device { self.hosts[.primary]?.call("openDevice", device) }
         }
     }
@@ -237,11 +257,15 @@ final class AppModel: NSObject {
 
     private func togglePanel() {
         guard let button = statusItem.button else { return }
-        panel.toggle(below: button)
-        // It can be switched off in System Settings too: the panel's menu shows what is true now.
         if panel.isVisible {
-            loginState = LoginItem.state
-            hosts[.primary]?.call("openAtLogin", loginState.rawValue)
+            panel.hide()
+            return
+        }
+        openPanel(below: button) { [weak self] in
+            // It can be switched off in System Settings too: the panel's menu shows what is true now.
+            guard let self, self.panel.isVisible else { return }
+            self.loginState = LoginItem.state
+            self.hosts[.primary]?.call("openAtLogin", self.loginState.rawValue)
         }
     }
 
@@ -272,6 +296,7 @@ final class AppModel: NSObject {
 
     func reloadLinks() {
         hub.setLinks(from: plans.activePlan == "custom" ? plans.customPlan() : nil)
+        homeName = plans.activePlan == "custom" ? (plans.customPlanName ?? "My home") : "Demo home"
     }
 
     /// A platform was connected or disconnected: read the devices again and tell the phones.
@@ -392,8 +417,8 @@ final class AppModel: NSObject {
     // MARK: - Device state
 
     /// Real devices are read while there is something on screen to show them in.
-    private func setPolling(_ requested: Bool) {
-        let on = requested || panel.isVisible || island?.isExpanded == true
+    func setPolling(_ requested: Bool) {
+        let on = requested || panel.isVisible || primaryPlace == .home || island?.isExpanded == true
         pollTimer?.invalidate()
         pollTimer = nil
         guard on, hub.canPoll else { return }

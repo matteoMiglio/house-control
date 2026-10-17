@@ -13,6 +13,16 @@ const DEMO_PLANS = [
   { id: 'studio', name: 'Demo · Studio' },
 ];
 const STAGE_INSETS = [62, 50]; // header above, panel overlap below
+const WIDE_INSETS = [62, 0];   // a wide window: the controls sit beside the model, not under it
+
+// Where the panel page is shown on the Mac: 'menubar' (the popover under the menu bar icon,
+// today's look) or 'window' (the app's main window). The same page moves between the two.
+function setChrome(chrome) {
+  if (chrome) document.documentElement.dataset.chrome = chrome;
+  else delete document.documentElement.dataset.chrome;
+}
+setChrome(window.__HOUSE_BOOT__?.chrome);
+const isWide = () => document.documentElement.dataset.chrome === 'window' && matchMedia('(min-width: 760px)').matches;
 
 const app = document.getElementById('app');
 if (isNative) document.documentElement.classList.add('native');
@@ -89,9 +99,10 @@ async function boot() {
 
   panel.attach(world);
   // On a phone the header sits lower (status bar) but is closer to the model.
-  const applyInsets = () => (isPhone ? world.setInsets(50 + safeAreaTop(), 36) : world.setInsets(...STAGE_INSETS));
+  const applyInsets = () => (isPhone ? world.setInsets(50 + safeAreaTop(), 36) : world.setInsets(...(isWide() ? WIDE_INSETS : STAGE_INSETS)));
   applyInsets();
-  new ResizeObserver(() => (isPhone ? applyInsets() : world.resize())).observe(panel.canvas);
+  new ResizeObserver(applyInsets).observe(panel.canvas);
+  incoming.setChrome = (chrome) => { setChrome(chrome); applyInsets(); };
 
   const show = () => { world.setRunning(true); world.intro(); };
   const hide = () => { world.setRunning(false); };

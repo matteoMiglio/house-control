@@ -85,6 +85,30 @@ html.native .card { width: auto; height: auto; box-shadow:
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07) inset;
 }
 
+/* In the app's main window the page is the window: no margin for a popover's shadow, no arrow. */
+html[data-chrome='window'] body { background: var(--bg); }
+html[data-chrome='window'] #app { padding: 0; }
+html[data-chrome='window'] .card { border-radius: 0; box-shadow: none; }
+html[data-chrome='window'] .card-clip { box-shadow: none; }
+html[data-chrome='window'] .notch { display: none; }
+
+/* A wide window: the model on the left, the controls in a column beside it. */
+@media (min-width: 760px) {
+  html[data-chrome='window'] .card { --side-w: min(440px, 42%); }
+  html[data-chrome='window'] .stage { inset: 0 var(--side-w) 0 0; height: auto; }
+  html[data-chrome='window'] .stage canvas {
+    -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 90%, transparent 100%);
+    mask-image: linear-gradient(90deg, #000 0%, #000 90%, transparent 100%);
+  }
+  html[data-chrome='window'] .panel, html[data-chrome='window'] .sheet {
+    inset: 0 0 0 auto;
+    width: var(--side-w);
+    padding-top: 82px;
+    border-left: 1px solid var(--line);
+  }
+  html[data-chrome='window'] .tint { right: var(--side-w); }
+}
+
 .notch {
   position: absolute;
   top: -9px;

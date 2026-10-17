@@ -4,7 +4,8 @@ import Foundation
 @MainActor
 final class WindowRouter {
     enum Destination {
-        case home, editor(section: String?), agent, pairing, settings
+        /// `home` is the main window; `panel` the popover under the menu bar icon.
+        case home, panel, editor(section: String?), agent, pairing, settings
     }
 
     /// Step 3 supplies SwiftUI's openWindow action here.
