@@ -11,6 +11,7 @@ import { createWorld } from '../three/world.js';
 import { wallSegments, EXT_T } from '../three/house.js';
 import { viewEdge, cameraColor } from '../three/cctv.js';
 import { coverage, entrances, coverageCanvas, levelDistances, LEVELS, BLIND_COLOR } from '../coverage.js';
+import { suggestCameras } from '../placement.js';
 import { FURNITURE_TYPES, footprint } from '../three/furniture.js';
 import { h, clamp } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
@@ -40,6 +41,13 @@ const AIM_REACH = 1; // metres from a camera to the knob that aims it
 const FIXTURE_LABEL = { lantern: 'wall lantern', post: 'garden post', flood: 'floodlight' };
 const LEVEL_MEANS = { detect: 'that someone is there', observe: 'what someone is doing', recognise: 'someone you know', identify: 'a stranger’s face' };
 const sqm = (v) => `${Math.round(v)} m²`;
+// Lenses to suggest cameras with: the angle of view and the sensor, as on spec sheets.
+const LENSES = [
+  ['2.8', '2.8 mm · 2K — wide (104°)', { fov: 104, resolution: [2560, 1440] }],
+  ['4', '4 mm · 2K — medium (85°)', { fov: 85, resolution: [2560, 1440] }],
+  ['6', '6 mm · 2K — narrow (55°)', { fov: 55, resolution: [2560, 1440] }],
+  ['2.8-4k', '2.8 mm · 4K — wide (104°)', { fov: 104, resolution: [3840, 2160] }],
+];
 const FLOOR_FILL = { oak: '#4a3d2e', walnut: '#3c2f28', tile: '#39424b', stone: '#30353c' };
 const WALLS = ['north', 'east', 'south', 'west'];
 const SCENE_ICONS = ['sun', 'sofa', 'film', 'moon', 'door', 'table', 'bed', 'tv', 'sparkles'];
@@ -147,6 +155,7 @@ export async function bootEditor(root) {
 
   function touch({ inspector: redrawInspector = true } = {}) {
     dirty = true;
+    suggestion = null; // it was worked out for the plan as it was
     renderSidebar();
     renderPlan();
     if (redrawInspector) renderInspector();
@@ -195,14 +204,26 @@ export async function bootEditor(root) {
     if (isPhone) phone.refresh();
   }
 
+  // Cameras suggested on the Camera coverage screen (placement.js), shown until added or dropped.
+  let suggestion = null;
+  const suggestWith = { count: 2, lens: '2.8', busy: false };
+  // Preview ids that no room, lamp, camera or scene of the plan has.
+  const suggestedCameras = () => {
+    const taken = new Set([...doc.rooms, ...doc.lights, ...doc.acs, ...doc.cameras, ...doc.scenes].map((x) => x.id));
+    let n = 0;
+    const next = () => { do n++; while (taken.has(`suggested-${n}`)); return `suggested-${n}`; };
+    return (suggestion?.cameras || []).map((c) => ({ ...c, id: next() }));
+  };
+
   // What the cameras make out (coverage.js), for all of them or one; kept while the plan is unchanged.
+  // The suggested cameras count too while they are shown.
   const coverageCache = new Map();
   function coverageFor(cameraId = null) {
     let cfg;
-    try { cfg = normalize(structuredClone(doc)); } catch { return null; }
+    try { cfg = normalize({ ...structuredClone(doc), cameras: [...doc.cameras, ...suggestedCameras()] }); } catch { return null; }
     const cams = cameraId ? cfg.cameras.filter((c) => c.id === cameraId) : cfg.cameras;
     if (!cams.length) return null;
-    const key = JSON.stringify([doc.rooms, doc.openings, doc.outdoor, doc.cameras, doc.site, doc.wallHeight, cameraId]);
+    const key = JSON.stringify([doc.rooms, doc.openings, doc.outdoor, doc.cameras, doc.site, doc.wallHeight, cameraId, suggestion?.cameras]);
     if (!coverageCache.has(key)) {
       const map = coverage(cfg, { cameras: cams });
       coverageCache.set(key, {
@@ -633,6 +654,18 @@ export async function bootEditor(root) {
       kids.push(g);
     });
 
+    // Suggested cameras: dotted, with their view, until they are added.
+    suggestedCameras().forEach((c, i) => {
+      const cfg = withCameraDefaults(c);
+      const color = cameraColor(doc.cameras.length + i);
+      const { ends } = viewEdge(cfg);
+      kids.push(sv('polygon', { class: 'p-cam-view suggested', points: ends.map((p) => `${fix(p.x)},${fix(p.z)}`).join(' '), style: `--cam: ${color}` }),
+        sv('g', { class: 'p-cam suggested', style: `--cam: ${color}`, transform: `translate(${cfg.pos[0]} ${cfg.pos[1]}) rotate(${-cfg.rot})` },
+          sv('circle', { r: 0.26, class: 'ring' }), sv('rect', { x: -0.09, y: -0.12, width: 0.18, height: 0.3, rx: 0.05 }),
+          sv('circle', { cx: 0, cy: 0.18, r: 0.05, class: 'lens' }),
+          sv('title', {}, document.createTextNode(`Suggested: ${c.where}`))));
+    });
+
     for (const cam of cams) {
       if (!cam) continue;
       const { c, i, color } = cam;
@@ -969,8 +1002,9 @@ export async function bootEditor(root) {
       const c = coverageNow();
       if (!c) {
         nodes.push(section('No cameras yet',
-          h('p.note', 'Add a security camera and drop it on the outside of a wall. This screen then shows how much of your plot the cameras see, how much detail they have where, and which doors and gates nobody watches.'),
-          h('button.btn.primary.wide', { onclick: () => add('camera') }, icon('plus', 14, 2.4), 'Add a camera')));
+          h('p.note', 'Add a security camera and drop it on the outside of a wall, or let House Control suggest where they go. This screen then shows how much of your plot the cameras see, how much detail they have where, and which doors and gates nobody watches.'),
+          h('button.btn.wide', { onclick: () => add('camera') }, icon('plus', 14, 2.4), 'Add a camera')),
+        suggestSection());
       } else {
         const { stats, ways } = c;
         const pct = (v) => (stats.plot ? Math.round((v / stats.plot) * 100) : 0);
@@ -990,6 +1024,7 @@ export async function bootEditor(root) {
               h('span', h('b', w.name), cam ? ` · ${cam.name || cam.id}` : ''), h('em', l ? l.name : 'Not seen'));
           }) : h('p.note', 'No doors in the outer walls or gates on the plan yet.'),
           h('p.note', 'For each door and gate: the most any camera makes out of the face of someone standing just outside it. Identify is what you want there.')),
+        suggestSection(),
         section('How it is worked out',
           h('p.note', 'A spot counts as seen when a camera has a clear line to the middle of a person standing there: walls, fences, hedges, sheds and cars block it, a gate’s bars and the space under a tree’s crown do not. Detail follows the pixels the camera puts on a metre there (IEC 62676-4): 25 to detect, 62.5 to observe, 125 to recognise, 250 to identify.')));
       }
@@ -1147,6 +1182,76 @@ export async function bootEditor(root) {
       el?.focus();
       try { if (caret?.[0] != null) el.setSelectionRange(caret[0], caret[1]); } catch { /* not a text field */ }
     }
+  }
+
+  // Suggest cameras: how many and which lens, then where they would go and what that changes.
+  function suggestSection() {
+    if (suggestion) {
+      const { before, after } = suggestion;
+      const pct = (v) => `${Math.round(v * 100)}%`;
+      const identified = (r) => r.ways.filter((w) => w.level === LEVELS.length).length;
+      const compare = (label, from, to) => h('div.cov-row.compare', h('i', { style: { background: 'var(--accent, #6aa6ff)' } }),
+        h('span', h('b', label)), h('em', `${from} → ${to}`));
+      return section(`${suggestion.cameras.length} suggested ${suggestion.cameras.length === 1 ? 'camera' : 'cameras'}`,
+        h('div.cov-legend',
+          compare('Plot seen', pct(before.seenShare), pct(after.seenShare)),
+          compare('Identify on the plot', pct(before.byLevelShare[3]), pct(after.byLevelShare[3])),
+          before.ways.length ? compare('Doors and gates at Identify', `${identified(before)} of ${before.ways.length}`, `${identified(after)} of ${after.ways.length}`) : null),
+        h('div.cov-legend.suggested-list', suggestion.cameras.map((c, i) => h('div.cov-row',
+          h('i', { style: { background: cameraColor(doc.cameras.length + i) } }),
+          h('span', h('b', `Camera ${doc.cameras.length + i + 1}`), ` · ${c.where}, ${c.y} m up`),
+          h('em', `${c.tilt}° down`)))),
+        h('div.fields',
+          h('button.btn.primary', { onclick: addSuggested }, icon('check', 13, 2.4), 'Add them'),
+          h('button.btn', { onclick: () => { suggestion = null; renderPlan(); renderInspector(); renderSidebar(); } }, 'Discard')),
+        h('p.note', 'Shown dotted on the plan, with what the cameras would see together. Once added you can move and aim them like any other; ⌘Z takes them away again.'));
+    }
+    const count = h('input', { type: 'number', min: 1, max: 8, step: 1, value: suggestWith.count, inputmode: 'numeric' });
+    count.addEventListener('input', () => { const n = Math.round(Number(count.value)); if (n >= 1 && n <= 8) suggestWith.count = n; });
+    const lens = choice(LENSES.map(([id, label]) => [id, label]));
+    lens.value = suggestWith.lens;
+    lens.addEventListener('change', () => { suggestWith.lens = lens.value; });
+    return section('Suggest cameras',
+      row(h('label.field', h('span', 'How many more'), count), h('label.field', h('span', 'Lens'), lens)),
+      h('button.btn.primary.wide', { onclick: runSuggestion, disabled: suggestWith.busy || !valid },
+        icon('sparkles', 14, 2.2), suggestWith.busy ? 'Working it out…' : 'Suggest where they go'),
+      h('p.note', doc.cameras.length
+        ? 'Tries every spot on the outside walls for the cameras you already have to be joined by the best ones: as much of the plot seen as it can, every door and gate at Identify first.'
+        : 'Tries every spot on the outside walls: as much of the plot seen as it can, every door and gate at Identify first.'));
+  }
+
+  function runSuggestion() {
+    if (!valid || suggestWith.busy) return;
+    suggestWith.busy = true;
+    renderInspector();
+    // A moment for "Working it out…" to show before the work holds the page up.
+    setTimeout(() => {
+      try {
+        const [, , lens] = LENSES.find(([id]) => id === suggestWith.lens) || LENSES[0];
+        suggestion = suggestCameras(valid, { count: suggestWith.count, camera: { ...lens, range: 15 } });
+        if (!suggestion.cameras.length) { suggestion = null; toast('No spot on the outside walls would add anything', true); }
+      } catch (e) {
+        suggestion = null;
+        toast(`Could not suggest cameras: ${e.message}`, true);
+      }
+      suggestWith.busy = false;
+      renderSidebar();
+      renderPlan();
+      renderInspector();
+      haptic('success');
+    }, 30);
+  }
+
+  function addSuggested() {
+    if (!suggestion) return;
+    const added = suggestedCameras();
+    snapshot();
+    for (const c of added) {
+      const { where, id: _, name: __, ...camera } = c;
+      doc.cameras.push({ id: uniqueId('camera'), name: `Camera · ${where}`, ...camera });
+    }
+    touch();
+    toast(`${added.length} ${added.length === 1 ? 'camera' : 'cameras'} added — ⌘Z takes them away`);
   }
 
   // How far out a camera makes out what, and how much of the plot it sees.

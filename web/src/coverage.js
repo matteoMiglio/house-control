@@ -166,7 +166,7 @@ export function clear(eye, target, blocks) {
 }
 
 // The camera's frame: forward, right and up as unit vectors, from `rot` and `tilt` (see cctv.js).
-function frame(cam) {
+export function frame(cam) {
   const r = rad(cam.rot);
   const t = rad(cam.tilt);
   const fwd = [Math.sin(r) * Math.cos(t), -Math.sin(t), Math.cos(r) * Math.cos(t)];
@@ -179,7 +179,7 @@ function frame(cam) {
 
 const LENS = 0.17; // keep in step with cctv.js
 
-function eyeOf(cam, f) {
+export function eyeOf(cam, f) {
   return [cam.pos[0] + f.fwd[0] * LENS, cam.y + f.fwd[1] * LENS, cam.pos[1] + f.fwd[2] * LENS];
 }
 

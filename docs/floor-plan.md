@@ -210,6 +210,16 @@ editor adds it up: how much of the plot is seen, at what detail, and how well ea
 - For a door or a gate, it is the face (1.6 m up) of someone standing just outside it that counts.
 - Ground on the plot that no camera sees is a blind spot, drawn in red.
 
+### Suggested cameras
+
+**Suggest where they go**, on the same screen, works out where a number of new cameras (with the lens you choose)
+would do the most, on top of the ones already planned. It tries every spot about a metre apart along the outside
+walls and by each corner, a little below the wall top, aimed straight out or along the wall and tilted 15–35°,
+and picks the cameras one by one: as much of the plot seen, in as much detail, as it can, every door and gate at
+Identify first. Then it adjusts each one's aim and place a little. They are shown dotted on the plan, with what
+all the cameras would see together and the difference they make, until you add them (⌘Z takes them away again)
+or discard them.
+
 ## `scenes`
 
 | Field | Meaning |
