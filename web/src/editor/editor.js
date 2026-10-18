@@ -57,10 +57,10 @@ export async function bootEditor(root) {
   for (const key of Object.values(KEYS)) doc[key] ||= [];
 
   // HOUSE_OPEN_EDITOR=connections|smartlife|homeassistant|hue|homekit opens a connection screen.
-  const startAt = window.__HOUSE_BOOT__?.section || new URLSearchParams(location.search).get('section') || '';
-  let sel = startAt === 'connections' ? { kind: 'connections' }
-    : startAt.startsWith('service:') ? { kind: 'service', service: startAt.slice(8) }
-      : startAt === 'tuya' ? { kind: 'service', service: 'smartlife' } : { kind: 'home' };
+  const sectionOf = (name) => (name === 'connections' ? { kind: 'connections' }
+    : name.startsWith('service:') ? { kind: 'service', service: name.slice(8) }
+      : name === 'tuya' ? { kind: 'service', service: 'smartlife' } : { kind: 'home' });
+  let sel = sectionOf(window.__HOUSE_BOOT__?.section || new URLSearchParams(location.search).get('section') || '');
   let dirty = false;
   let world = null;
   let phone = null; // the iPhone's layout and gestures, set up by buildPhoneLayout()
@@ -1664,6 +1664,8 @@ export async function bootEditor(root) {
   validate();
   schedulePreview(0);
   // A plan saved on the other device (the Mac, or the paired iPhone) while this editor is open.
+  // The app asks an editor that is already open to show a section (Connections… in its sidebar).
+  incoming.openSection = (name) => select(sectionOf(name || ''));
   incoming.planArrived = (config, from) => {
     if (dirty) {
       toast(`${from || 'Your other device'} saved a newer plan. Saving here replaces it.`, true);

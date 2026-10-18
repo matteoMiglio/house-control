@@ -409,6 +409,9 @@ final class AppModel: NSObject {
             hosts[.editor] = host
             editor = controller
             host.load()
+        } else if let section {
+            // Already open: it switches to the section asked for (Connections…).
+            hosts[.editor]?.call("openSection", section)
         }
         editor?.show()
     }

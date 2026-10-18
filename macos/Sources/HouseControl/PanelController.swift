@@ -19,6 +19,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     let host: WebHost
     private let window: FloatingPanel
     private var outsideClickMonitor: Any?
+    private var localClickMonitor: Any?
+    private weak var statusButtonWindow: NSWindow?
     private(set) var isVisible = false
     private var lastHide = Date.distantPast
     var onVisibilityChange: ((Bool) -> Void)?
@@ -56,6 +58,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     func show(below button: NSStatusBarButton) {
         guard let buttonWindow = button.window else { return }
+        statusButtonWindow = buttonWindow
         let anchor = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
         let screen = buttonWindow.screen ?? NSScreen.main
         let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
@@ -83,9 +86,19 @@ final class PanelController: NSObject, NSWindowDelegate {
             ctx.duration = 0.16
             window.animator().alphaValue = 1
         }
-        if !pinned {
+        if !pinned && outsideClickMonitor == nil {
             outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
                 self?.hide()
+            }
+        }
+        if !pinned && localClickMonitor == nil {
+            localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+                // The status button handles its own toggle; other app windows dismiss the panel.
+                if let self, let clickedWindow = event.window,
+                   clickedWindow !== self.window, clickedWindow !== self.statusButtonWindow {
+                    self.hide()
+                }
+                return event
             }
         }
         onVisibilityChange?(true)
@@ -97,6 +110,9 @@ final class PanelController: NSObject, NSWindowDelegate {
         lastHide = Date()
         if let monitor = outsideClickMonitor { NSEvent.removeMonitor(monitor) }
         outsideClickMonitor = nil
+        if let monitor = localClickMonitor { NSEvent.removeMonitor(monitor) }
+        localClickMonitor = nil
+        statusButtonWindow = nil
         // The fade's completion does not come while the display sleeps (nothing animates then),
         // so a timer finishes the job too: whichever comes first, once.
         let finish = { [weak self] in
