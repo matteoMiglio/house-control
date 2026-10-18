@@ -1,6 +1,9 @@
 import Foundation
 
-/// Keeps window requests until the existing controllers and primary page are ready.
+/// One route for every way a window is asked for: the menu bar icon's menu, the web pages,
+/// widget links, the Dock and the HOUSE_OPEN_* hooks. Windows open at once; what needs the
+/// panel's page (the panel itself, a device to show in it) waits until that page has loaded —
+/// or a few seconds, should it never say so (a page that failed still shows its error).
 @MainActor
 final class WindowRouter {
     enum Destination {
@@ -8,24 +11,28 @@ final class WindowRouter {
         case home, panel, editor(section: String?), agent, pairing, settings
     }
 
-    /// Step 3 supplies SwiftUI's openWindow action here.
-    var openWindow: ((String) -> Void)?
     private(set) var ready = false
     private var pending: [() -> Void] = []
     private let perform: (Destination) -> Void
 
     init(perform: @escaping (Destination) -> Void) {
         self.perform = perform
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in self?.markReady() }
     }
 
     func show(_ destination: Destination, then completion: (() -> Void)? = nil) {
+        guard case .panel = destination else {
+            perform(destination)
+            completion?()
+            return
+        }
         whenReady { [weak self] in
             self?.perform(destination)
             completion?()
         }
     }
 
-    /// Deep links also wait before addressing a device in the primary page.
+    /// Runs `action` once the panel's page is ready (deep links address a device in it).
     func whenReady(_ action: @escaping () -> Void) {
         guard ready else {
             pending.append(action)

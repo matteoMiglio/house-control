@@ -66,6 +66,10 @@ final class AppModel: NSObject {
     @ObservationIgnored var mainWindow: MainWindowController?
     @ObservationIgnored weak var homeSlot: WebSlotView?
     @ObservationIgnored var primaryPlace: PrimaryPlace = .none
+    /// The main window is open and not minimised, as its controller last said.
+    @ObservationIgnored var mainShown = false
+    /// Counts requests to open the panel, so one still waiting for a snapshot can tell it was cancelled.
+    @ObservationIgnored var panelRequest = 0
     /// The AI Access page, made the first time its screen is shown and kept from then on.
     @ObservationIgnored var agentPage: WebHost?
     /// Pair iPhone: the code to scan and how pairing is going.
@@ -115,6 +119,8 @@ final class AppModel: NSObject {
         hosts[.primary] = host
         panel = PanelController(host: host)
         panel.onVisibilityChange = { [weak self] visible in self?.setPolling(visible) }
+        // Going back to the main window, the page is not hidden: it keeps its room and sheet.
+        panel.keepsPageLive = { [weak self] in self?.homeSlot != nil && self?.mainShown == true }
         panel.onHidden = { [weak self] in
             self?.primaryPlace = .none
             self?.placePrimary()
@@ -226,7 +232,7 @@ final class AppModel: NSObject {
 
     @objc private func statusItemClicked() {
         if NSApp.currentEvent?.type == .rightMouseUp {
-            panel.hide()
+            dismissPanel()
             let menu = NSMenu()
             menu.addItem(withTitle: "Open House Control", action: #selector(requestHome), keyEquivalent: "").target = self
             menu.addItem(.separator())
@@ -272,7 +278,7 @@ final class AppModel: NSObject {
     private func togglePanel() {
         guard let button = statusItem.button else { return }
         if panel.isVisible {
-            panel.hide()
+            dismissPanel()
             return
         }
         openPanel(below: button) { [weak self] in
@@ -329,7 +335,7 @@ final class AppModel: NSObject {
     }
 
     @objc func loadPlan() {
-        panel.hide()
+        dismissPanel()
         NSApp.activate(ignoringOtherApps: true)
         let open = NSOpenPanel()
         open.title = "Choose a floor plan"
@@ -392,7 +398,7 @@ final class AppModel: NSObject {
     @objc private func requestPairing() { router.show(.pairing) }
 
     private func openEditor(section: String? = nil) {
-        panel.hide()
+        dismissPanel()
         if editor == nil {
             let host = WebHost(mode: "editor", transparent: false) { [unowned self] in
                 var boot = self.bootPayload()

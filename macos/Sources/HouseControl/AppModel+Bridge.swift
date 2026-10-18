@@ -16,6 +16,7 @@ extension AppModel {
             if message["type"] as? String == "ready", host === hosts[.primary] {
                 widgets.isReady = true
                 router.markReady()
+                primaryLoaded()
             }
             if let summary = (message["summary"] as? [String: Any]) ?? (message["lightsOn"] != nil ? message : nil) {
                 updateStatus(summary)
@@ -35,7 +36,7 @@ extension AppModel {
             if host === hosts[.primary] { widgets.publish(message) }
         case "close":
             // Escape in the panel closes it; in the main window the page stays.
-            panel.hide()
+            dismissPanel()
         case "selectPlan":
             if let plan = message["plan"] as? String {
                 plans.select(plan)

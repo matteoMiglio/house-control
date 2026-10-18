@@ -26,6 +26,9 @@ final class PanelController: NSObject, NSWindowDelegate {
     var onVisibilityChange: ((Bool) -> Void)?
     /// After the panel has faded out and told the page it is hidden: the page is free to go elsewhere.
     var onHidden: (() -> Void)?
+    /// Asked as the panel closes: true when its page goes on being shown elsewhere, so it is not
+    /// told it is hidden (which would also reset the room it shows and close its sheet).
+    var keepsPageLive: (() -> Bool)?
     /// Keeps the panel open when it loses focus (HOUSE_PIN=1, for UI automation and screenshots).
     private let pinned = ProcessInfo.processInfo.environment["HOUSE_PIN"] != nil
 
@@ -118,7 +121,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         let finish = { [weak self] in
             guard let self, !self.isVisible, self.window.isVisible else { return }
             self.window.orderOut(nil)
-            self.host.call("hidden")
+            if self.keepsPageLive?() != true { self.host.call("hidden") }
             self.onHidden?()
         }
         NSAnimationContext.runAnimationGroup({ ctx in

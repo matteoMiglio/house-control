@@ -15,10 +15,14 @@ extension AppModel {
         if let section { self.section = section }
         if mainWindow == nil {
             let controller = MainWindowController(model: self)
-            controller.onVisibilityChange = { [weak self] _ in self?.placePrimary() }
+            // Told before the window is gone (windowWillClose): what it says counts, not its isVisible.
+            controller.onVisibilityChange = { [weak self] shown in
+                self?.mainShown = shown
+                self?.placePrimary()
+            }
             mainWindow = controller
         }
-        panel.hide()
+        dismissPanel()
         mainWindow?.show()
     }
 
@@ -32,7 +36,7 @@ extension AppModel {
     /// page itself), otherwise in the main window's Home, otherwise nowhere.
     func placePrimary() {
         guard let host = hosts[.primary], !panel.isVisible else { return }
-        if let slot = homeSlot, mainWindow?.isVisible == true {
+        if let slot = homeSlot, mainShown {
             guard primaryPlace != .home || host.webView.superview !== slot else { return }
             slot.lend(host.webView)
             host.call("setChrome", "window")
@@ -60,7 +64,7 @@ extension AppModel {
     /// House Control → Settings… (⌘,): the SwiftUI settings in a window of their own, opened
     /// directly like the main window (macOS gives AppKit no way to open the Settings scene).
     func openSettings() {
-        panel.hide()
+        dismissPanel()
         if settingsWindow == nil {
             let window = NSWindow(contentViewController: NSHostingController(rootView: MacSettingsView(model: self)))
             window.title = "House Control Settings"
@@ -77,6 +81,8 @@ extension AppModel {
     /// Opens the panel, taking its page from the main window if it is there: the window keeps a
     /// still of how the page looked until the panel gives it back.
     func openPanel(below button: NSStatusBarButton, then done: @escaping () -> Void) {
+        panelRequest += 1
+        let request = panelRequest
         guard primaryPlace == .home, let slot = homeSlot, let host = hosts[.primary] else {
             panel.toggle(below: button)
             panelToggled()
@@ -84,11 +90,30 @@ extension AppModel {
             return
         }
         host.webView.takeSnapshot(with: nil) { [weak self] image, _ in
-            guard let self else { return }
+            // Something else (a window, a second click) came first: the panel stays closed.
+            guard let self, request == self.panelRequest else { return }
             slot.showStill(image)
             self.panel.toggle(below: button)
             self.panelToggled()
             done()
+        }
+    }
+
+    /// Closes the panel, and cancels an opening still waiting for its snapshot.
+    func dismissPanel() {
+        panelRequest += 1
+        panel.hide()
+    }
+
+    /// The panel's page (re)loaded: it learns again where it is shown, and starts drawing there.
+    func primaryLoaded() {
+        guard let host = hosts[.primary] else { return }
+        if panel.isVisible {
+            host.call("setChrome", "menubar")
+            host.call("shown")
+        } else if primaryPlace == .home {
+            host.call("setChrome", "window")
+            host.call("shown")
         }
     }
 
