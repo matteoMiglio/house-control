@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import HouseCore
 import HouseSmartLife
 
@@ -58,30 +59,20 @@ extension AppModel {
         if let host = hosts[.editor], let plan = plans.customPlan() { host.call("planArrived", plan, phone) }
     }
 
-    /// Shows the QR code an iPhone scans once to find this Mac and receive its floor plan.
-    func pairPhone() {
-        panel.hide()
-        let pairing = sync.enable(name: computerName)
-        if pairingWindow == nil {
-            let window = QRWindowController(title: "Pair iPhone")
-            window.onClose = { [weak self] in self?.pairingWindow = nil }
-            window.addButton("Copy Pairing Link") { [weak self] in
-                guard let link = self?.sync.pairing?.link else { return }
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(link, forType: .string)
-            }
-            window.addButton("Reset Pairing…") { [weak self] in self?.resetPairing() }
-            pairingWindow = window
-        }
-        pairingWindow?.show(code: pairing.link,
-                            headline: "Scan with House Control on your iPhone",
-                            detail: "On the iPhone open Settings → Pair with Mac. Both devices must be on the same Wi-Fi. "
-                                + "Your floor plan, device links and connections stay the same on both, whichever one you edit; "
-                            + "they travel straight between them, encrypted with the key in this code.")
+    /// Pair iPhone: makes (or reuses) the code an iPhone scans once to find this Mac and
+    /// receive its floor plan, and starts listening for it.
+    func enablePairing() {
+        pairingLink = sync.enable(name: computerName).link
         refreshPairingWindow()
     }
 
-    private func resetPairing() {
+    func copyPairingLink() {
+        guard let link = sync.pairing?.link else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(link, forType: .string)
+    }
+
+    func resetPairing() {
         let alert = NSAlert()
         alert.messageText = "Reset pairing?"
         alert.informativeText = "Every iPhone paired so far stops syncing until it scans the new code."
@@ -89,20 +80,20 @@ extension AppModel {
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         sync.reset(name: computerName)
-        pairPhone()
+        enablePairing()
     }
 
-    private func refreshPairingWindow() {
+    func refreshPairingWindow() {
         connectedDevices = sync.connectedDevices
         let devices = connectedDevices
         if !devices.isEmpty {
-            pairingWindow?.setStatus("Connected: \(devices.joined(separator: ", "))", active: true)
+            pairingStatus = PairingStatus(text: "Connected: \(devices.joined(separator: ", "))", active: true)
         } else if sync.isAdvertised {
-            pairingWindow?.setStatus("Waiting for an iPhone…", active: false)
+            pairingStatus = PairingStatus(text: "Waiting for an iPhone…", active: false)
         } else {
             // Until macOS lets the app use the local network, no phone can find this Mac.
-            pairingWindow?.setStatus("Allow Local Network access for House Control in System Settings → Privacy & Security",
-                                     active: false)
+            pairingStatus = PairingStatus(text: "Allow Local Network access for House Control in System Settings → Privacy & Security",
+                                          active: false)
         }
     }
 
@@ -116,26 +107,27 @@ extension AppModel {
     private func showLoginCode(_ content: String?, for device: String) {
         loginWindowExpiry?.cancel()
         loginWindowExpiry = nil
-        guard let content, content.hasPrefix("tuyaSmart--qrLogin?token=") else {
-            loginWindow?.close()
-            loginWindow = nil
-            return
-        }
+        loginWindow?.close()
+        loginWindow = nil
+        guard let content, content.hasPrefix("tuyaSmart--qrLogin?token=") else { return }
         let expiry = DispatchWorkItem { [weak self] in
             self?.loginWindow?.close()
             self?.loginWindow = nil
         }
         loginWindowExpiry = expiry
         DispatchQueue.main.asyncAfter(deadline: .now() + 600, execute: expiry)
-        if loginWindow == nil {
-            let window = QRWindowController(title: "Smart Life Sign-In for \(device)")
-            window.onClose = { [weak self] in self?.loginWindow = nil }
-            loginWindow = window
-        }
-        loginWindow?.show(code: content,
-                          headline: "Scan with the Smart Life app on \(device)",
-                          detail: "Switch to Smart Life on the iPhone, tap the scanner on its Home tab and confirm the login. "
-                              + "Then return to House Control: this window closes once the iPhone is signed in.")
-        loginWindow?.setStatus("Requested by \(device)", active: true)
+        let window = NSWindow(contentViewController: NSHostingController(rootView: PhoneLoginView(content: content, device: device)))
+        window.title = "Smart Life Sign-In for \(device)"
+        window.styleMask = [.titled, .closable, .fullSizeContentView]
+        window.titlebarAppearsTransparent = true
+        window.isMovableByWindowBackground = true
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.backgroundColor = NSColor(calibratedRed: 0.04, green: 0.055, blue: 0.1, alpha: 1)
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.center()
+        loginWindow = window
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
     }
 }

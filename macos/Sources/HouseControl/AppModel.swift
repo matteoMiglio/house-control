@@ -27,8 +27,8 @@ final class AppModel: NSObject {
         return sync
     }
     @ObservationIgnored var island: IslandController?
-    @ObservationIgnored var pairingWindow: QRWindowController?
-    @ObservationIgnored var loginWindow: QRWindowController?
+    @ObservationIgnored var loginWindow: NSWindow?
+    @ObservationIgnored var settingsWindow: NSWindow?
     @ObservationIgnored var loginWindowExpiry: DispatchWorkItem?
     @ObservationIgnored var statusItem: NSStatusItem!
     @ObservationIgnored var panel: PanelController!
@@ -66,6 +66,12 @@ final class AppModel: NSObject {
     @ObservationIgnored var mainWindow: MainWindowController?
     @ObservationIgnored weak var homeSlot: WebSlotView?
     @ObservationIgnored var primaryPlace: PrimaryPlace = .none
+    /// The AI Access page, made the first time its screen is shown and kept from then on.
+    @ObservationIgnored var agentPage: WebHost?
+    /// Pair iPhone: the code to scan and how pairing is going.
+    var pairingLink: String?
+    var pairingStatus = PairingStatus(text: "", active: false)
+    struct PairingStatus: Equatable { var text: String; var active: Bool }
 
     enum HostRole: CaseIterable { case primary, editor, agent, island }
     @ObservationIgnored var hosts: [HostRole: WebHost] = [:]
@@ -84,9 +90,9 @@ final class AppModel: NSObject {
             case .home: self.showMainWindow(.home)
             case .panel: if !self.panel.isVisible { self.togglePanel() }
             case .editor(let section): self.openEditor(section: section)
-            case .agent: self.openAgent()
-            case .pairing: self.pairPhone()
-            case .settings: break // The Settings scene is a placeholder until step 4.
+            case .agent: self.showMainWindow(.agent)
+            case .pairing: self.showMainWindow(.pairing)
+            case .settings: self.openSettings()
             }
         }
         storedRouter = router
@@ -117,7 +123,9 @@ final class AppModel: NSObject {
         widgets.onActions = { [weak self] run, adopt in
             guard let self else { return }
             if !run.isEmpty { self.hosts[.primary]?.call("widget", run) }
-            if let adopt { self.hosts[.primary]?.call("adopt", adopt) }
+            // What a widget changed by itself is adopted, and adopted state is not passed on:
+            // the island takes it directly.
+            if let adopt { for role in [HostRole.primary, .island] { self.hosts[role]?.call("adopt", adopt) } }
         }
         reloadLinks()
         host.load()
@@ -152,6 +160,9 @@ final class AppModel: NSObject {
             router.show(.agent) { [weak self] in
                 if open == "start" { self?.agent.start() }
             }
+        }
+        if ProcessInfo.processInfo.environment["HOUSE_OPEN_SETTINGS"] != nil {
+            router.show(.settings)
         }
         if ProcessInfo.processInfo.environment["HOUSE_OPEN_ON_LAUNCH"] != nil {
             router.show(.panel)
@@ -217,6 +228,8 @@ final class AppModel: NSObject {
         if NSApp.currentEvent?.type == .rightMouseUp {
             panel.hide()
             let menu = NSMenu()
+            menu.addItem(withTitle: "Open House Control", action: #selector(requestHome), keyEquivalent: "").target = self
+            menu.addItem(.separator())
             menu.addItem(withTitle: "Edit Home…", action: #selector(requestEditor), keyEquivalent: "").target = self
             menu.addItem(withTitle: "Load Floor Plan…", action: #selector(loadPlan), keyEquivalent: "").target = self
             menu.addItem(withTitle: "Reveal Plan File", action: #selector(revealPlan), keyEquivalent: "").target = self
@@ -245,6 +258,7 @@ final class AppModel: NSObject {
             }
             menu.addItem(.separator())
             menu.addItem(aboutMenuItem())
+            menu.addItem(withTitle: "Settings…", action: #selector(requestSettings), keyEquivalent: ",").target = self
             menu.addItem(withTitle: "Reload", action: #selector(reloadAll), keyEquivalent: "").target = self
             menu.addItem(withTitle: "Quit House Control", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
             statusItem.menu = menu
@@ -366,11 +380,13 @@ final class AppModel: NSObject {
         if let url = sender.representedObject as? URL { NSWorkspace.shared.open(url) }
     }
 
-    @objc private func revealLog() {
+    @objc func revealLog() {
         if !FileManager.default.fileExists(atPath: hub.log.fileURL.path) { hub.log.write("log started") }
         NSWorkspace.shared.activateFileViewerSelecting([hub.log.fileURL])
     }
 
+    @objc private func requestHome() { router.show(.home) }
+    @objc private func requestSettings() { router.show(.settings) }
     @objc private func requestEditor() { router.show(.editor(section: nil)) }
     @objc private func requestAgent() { router.show(.agent) }
     @objc private func requestPairing() { router.show(.pairing) }
@@ -406,11 +422,6 @@ final class AppModel: NSObject {
     }
 
     // MARK: - AI Access
-
-    private func openAgent() {
-        panel.hide()
-        agent.showWindow()
-    }
 
     @objc private func stopAgent() { agent.stop() }
 
@@ -460,8 +471,9 @@ final class AppModel: NSObject {
         islandShown = island?.isShown == true
     }
 
-    @objc private func toggleIsland() {
-        let show = island?.isShown != true
+    @objc private func toggleIsland() { setIsland(island?.isShown != true) }
+
+    func setIsland(_ show: Bool) {
         UserDefaults.standard.set(show, forKey: "island")
         if show { showIsland() } else { island?.hide() }
         islandShown = island?.isShown == true

@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// What the main window's sidebar shows.
 enum MainSection: Hashable { case home, agent, pairing }
@@ -42,6 +43,35 @@ extension AppModel {
             primaryPlace = .none
         }
         setPolling(false)
+    }
+
+    /// The AI Access screen came on screen: it shows the AI Access page, made the first time.
+    func agentSlot(_ slot: WebSlotView, present: Bool) {
+        guard present else { return }
+        if agentPage == nil {
+            let host = WebHost(mode: "agent", transparent: false) { [unowned self] in ["agent": self.agent.status()] }
+            agent.attach(host)
+            agentPage = host
+            host.load()
+        }
+        if let host = agentPage { slot.lend(host.webView) }
+    }
+
+    /// House Control → Settings… (⌘,): the SwiftUI settings in a window of their own, opened
+    /// directly like the main window (macOS gives AppKit no way to open the Settings scene).
+    func openSettings() {
+        panel.hide()
+        if settingsWindow == nil {
+            let window = NSWindow(contentViewController: NSHostingController(rootView: MacSettingsView(model: self)))
+            window.title = "House Control Settings"
+            window.styleMask = [.titled, .closable]
+            window.isReleasedWhenClosed = false
+            window.isRestorable = false
+            window.center()
+            settingsWindow = window
+        }
+        NSApp.activate()
+        settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
     /// Opens the panel, taking its page from the main window if it is there: the window keeps a

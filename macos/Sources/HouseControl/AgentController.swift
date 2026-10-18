@@ -27,7 +27,6 @@ final class AgentController: NSObject, AgentBackend {
     private weak var host: WebHost?
 
     private(set) var phase: Phase = .off
-    private var window: AgentWindow?
     private var activity: [AgentActivity] = []
     /// What the plan was before each change an AI made, newest last.
     private var history: [(data: Data?, active: String)] = []
@@ -250,21 +249,7 @@ final class AgentController: NSObject, AgentBackend {
         var errorDescription: String? { message }
     }
 
-    // MARK: - Window
-
-    func showWindow() {
-        if window == nil {
-            let host = WebHost(mode: "agent", transparent: false) { [unowned self] in ["agent": self.status()] }
-            let window = AgentWindow(host: host, controller: self)
-            window.onClose = { [weak self, unowned host] in
-                host.webView.configuration.userContentController.removeScriptMessageHandler(forName: "house")
-                self?.window = nil
-            }
-            self.window = window
-            host.load()
-        }
-        window?.show()
-    }
+    // MARK: - Page
 
     func attach(_ host: WebHost) {
         detach()
@@ -359,47 +344,5 @@ final class AgentController: NSObject, AgentBackend {
 
     private func push() {
         host?.call("agentStatus", status())
-    }
-}
-
-/// The AI Access window.
-@MainActor
-final class AgentWindow: NSObject, NSWindowDelegate {
-    let host: WebHost
-    private let window: NSWindow
-    private weak var controller: AgentController?
-    var onClose: (() -> Void)?
-
-    init(host: WebHost, controller: AgentController) {
-        self.host = host
-        self.controller = controller
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 820),
-                          styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-                          backing: .buffered, defer: false)
-        super.init()
-        window.title = "AI Access"
-        window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
-        window.isMovableByWindowBackground = true
-        window.backgroundColor = NSColor(calibratedRed: 0.035, green: 0.043, blue: 0.08, alpha: 1)
-        window.appearance = NSAppearance(named: .darkAqua)
-        window.minSize = NSSize(width: 420, height: 560)
-        window.maxSize = NSSize(width: 640, height: 2000)
-        window.isReleasedWhenClosed = false
-        window.delegate = self
-        window.contentView = host.webView
-        window.center()
-        window.setFrameAutosaveName("HouseControlAgent")
-        controller.attach(host)
-    }
-
-    func show() {
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        controller?.detach()
-        onClose?()
     }
 }

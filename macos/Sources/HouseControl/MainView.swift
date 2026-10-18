@@ -9,17 +9,38 @@ struct MainView: View {
         NavigationSplitView {
             List(selection: $model.section) {
                 Label("Home", systemImage: "house").tag(MainSection.home)
+                Label {
+                    HStack {
+                        Text("AI Access")
+                        Spacer()
+                        if model.agentLive { LiveBadge() }
+                    }
+                } icon: { Image(systemName: "sparkles") }
+                    .tag(MainSection.agent)
+                Label {
+                    HStack {
+                        Text("Pair iPhone")
+                        Spacer()
+                        if !model.connectedDevices.isEmpty {
+                            Text("\(model.connectedDevices.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                    }
+                } icon: { Image(systemName: "iphone") }
+                    .tag(MainSection.pairing)
 
                 Section("Set Up") {
                     SidebarButton("Edit Home…", systemImage: "square.and.pencil") { model.router.show(.editor(section: nil)) }
                     SidebarButton("Connections…", systemImage: "link") { model.router.show(.editor(section: "connections")) }
-                    SidebarButton("AI Access…", systemImage: "sparkles") { model.router.show(.agent) }
-                    SidebarButton("Pair iPhone…", systemImage: "iphone") { model.router.show(.pairing) }
+                    SidebarButton("Settings…", systemImage: "gearshape") { model.router.show(.settings) }
                 }
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
         } detail: {
-            HomeView(model: model)
+            switch model.section {
+            case .home: HomeView(model: model)
+            case .agent: AgentView(model: model)
+            case .pairing: PairingView(model: model)
+            }
         }
     }
 }
@@ -34,6 +55,31 @@ private struct HomeView: View {
             .ignoresSafeArea(.container, edges: .top)
             .navigationTitle(model.homeName)
             .toolbar(removing: .title) // the page shows the home's name itself
+    }
+}
+
+/// AI Access: its page, made for a narrow window, in a column down the middle.
+private struct AgentView: View {
+    let model: AppModel
+
+    var body: some View {
+        WebSlot { slot, present in model.agentSlot(slot, present: present) }
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
+            .background(Color(red: 0.035, green: 0.043, blue: 0.08))
+            .navigationTitle("AI Access")
+    }
+}
+
+/// Shown beside AI Access while an assistant has a live link.
+private struct LiveBadge: View {
+    var body: some View {
+        Text("Live")
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(.green.opacity(0.22), in: Capsule())
+            .foregroundStyle(.green)
     }
 }
 
