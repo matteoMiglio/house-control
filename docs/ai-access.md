@@ -8,12 +8,12 @@ There is no House Control server and no account. Your Mac answers the assistant 
 only while AI Access is on.
 
 <p align="center">
-  <img src="ai-access.png" width="420" alt="The AI Access window: the private link, ways to connect an assistant, permissions and the live activity feed">
+  <img src="ai-access.png" width="420" alt="AI Access: the private link, ways to connect an assistant, permissions and the live activity feed">
 </p>
 
 ## Start
 
-1. Right-click the menu bar icon → **AI Access…** (or the gear in the panel → **AI access…**).
+1. **AI Access** in the window's sidebar (or right-click the menu bar icon → **AI Access…**, or the gear in the panel → **AI access…**).
 2. Press **Start AI Access**. A few seconds later the window shows your private link.
 3. Hand it to an assistant — see [Connect an assistant](#connect-an-assistant).
 

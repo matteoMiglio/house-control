@@ -21,7 +21,8 @@
 
 ## What it does
 
-- **Lives in the menu bar.** Click the house icon and a panel drops down; click anywhere else and it is gone.
+- **A Mac app, one click away in the menu bar.** Its window shows the home with all its controls, AI Access and
+  iPhone pairing; click the house icon in the menu bar and the same panel drops down; click anywhere else and it is gone.
 - **Your floor plan in 3D.** Rooms, walls, doors, windows and furniture are built from one JSON file.
   Lamps light the scene the way they light the room; an AC that is running blows visible air.
 - **Lights.** Tap to toggle, drag across a tile to dim, open a light for brightness, white temperature and colour.
@@ -54,22 +55,22 @@ No frameworks, no Electron, no server, no account of its own.
 ## Download
 
 1. Get `HouseControl-<version>.dmg` from [Releases](https://github.com/0xProbabillity/house-control/releases).
-   It runs on macOS 13 or newer, Apple silicon and Intel.
+   It runs on macOS 26 Tahoe or newer, Apple silicon and Intel. (Version 1.0 runs on macOS 13 and newer.)
 2. Open it and drag **House Control** into **Applications**.
 3. Open **House Control** from Applications. The first time, macOS stops it with *“Apple could not verify…”*,
    because the app is not signed with a paid Apple Developer ID (see [why](#why-the-app-is-not-notarized)).
    Allow it once:
-   - **macOS 15 Sequoia and newer:** click **Done**, open **System Settings → Privacy & Security**, scroll down
-     to *“House Control was blocked…”*, click **Open Anyway** and confirm with your password.
-   - **macOS 13–14:** Control-click the app in Applications, choose **Open**, then **Open** again.
+   Click **Done**, open **System Settings → Privacy & Security**, scroll down to *“House Control was blocked…”*,
+   click **Open Anyway** and confirm with your password.
    - Or, in Terminal: `xattr -dr com.apple.quarantine "/Applications/House Control.app"`
-4. Look for the house in the menu bar — there is no Dock icon and no window. Click it.
+4. Its window opens, and the house appears in the menu bar: click it for the panel, from any app.
 
 What is new in each release: [CHANGELOG.md](CHANGELOG.md).
 
 It starts with a bundled demo plan, so you can try everything before connecting anything. Then:
 [make it your home](#make-it-your-home) and [connect real devices](#connect-real-devices).
-To start it with your Mac, add it under **System Settings → General → Login Items**.
+To start it with your Mac, turn on **Open at Login** in its Settings (⌘,); started at login it waits in the menu
+bar without opening its window.
 
 ### Check what you downloaded
 
@@ -100,8 +101,8 @@ plan and connections too, `~/Library/Application Support/HouseControl/`.
 
 | | |
 | --- | --- |
-| macOS | 13 Ventura or newer |
-| Xcode Command Line Tools | Swift 5.9 or newer — `xcode-select --install` |
+| macOS | 26 Tahoe or newer |
+| Xcode Command Line Tools | with the macOS 26 SDK (Xcode 26) — `xcode-select --install` |
 | Node.js | 20.19+ or 22.12+ |
 | For the iPhone app | Xcode 16 or newer, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`), iOS 17+ |
 
@@ -122,17 +123,19 @@ macOS does not ask for the Local Network permission after every build:
 `CODESIGN_IDENTITY="Apple Development: you@example.com (ABCDE12345)" ./scripts/build-app.sh`.
 
 To keep it, drag `build/HouseControl.app` into `/Applications`. To start it with your Mac, turn on **Open at
-Login** in the menu bar icon's right-click menu (or in the panel's gear menu); it shows up under
+Login** in Settings (⌘,), the menu bar icon's right-click menu or the panel's gear menu; it shows up under
 **System Settings → General → Login Items**, where it can be switched off too.
 
-There is no Dock icon and no main window: look for the house in the menu bar.
+Closing the window keeps the app running in the menu bar (the panel, the island, iPhone sync and AI Access go on);
+click its Dock icon to bring the window back, ⌘Q to quit.
 
 ## Using it
 
 | Do this | To get this |
 | --- | --- |
 | Click the menu bar icon | Open or close the panel |
-| Right-click the menu bar icon | Edit Home, Load Floor Plan, Reveal Plan File, Reveal Device Log, Show Island, Open at Login, Pair iPhone, AI Access, Reload, Quit |
+| Right-click the menu bar icon | Open House Control, Edit Home, Load Floor Plan, Reveal Plan File, Reveal Device Log, Show Island, Open at Login, Pair iPhone, AI Access, Settings, Reload, Quit |
+| In the window's sidebar | Home, AI Access, Pair iPhone; Edit Home…, Connections…, Settings… |
 | Click a lamp in the 3D view, or its tile | Toggle it |
 | Drag sideways across a light tile | Dim it |
 | Click the sliders icon on a light tile | Brightness, white temperature, colour |
@@ -174,7 +177,7 @@ peeks out for a moment to say what happened. It never takes the keyboard from th
   <img src="docs/ai-access.png" width="380" alt="The AI Access window">
 </p>
 
-Right-click the menu bar icon → **AI Access…** → **Start AI Access**, and hand the private link to an assistant:
+**AI Access** in the window's sidebar (or right-click the menu bar icon → **AI Access…**) → **Start AI Access**, and hand the private link to an assistant:
 
 - **Any chat:** paste it into ChatGPT, Claude, Gemini or Perplexity with your request — *"dim the living room to 30%"*.
   The link opens a guide written for AI assistants, with an action link for everything it can do.
@@ -238,7 +241,7 @@ The two editions are separate apps (bundle id and App Group), so both can sit on
 Optional. Pair a Mac and your floor plan — rooms, furniture, lamps, scenes and the links to real devices — plus the
 Home Assistant and Hue connections stay the same on both, whichever one you set up or edit first.
 
-1. On the Mac: right-click the menu bar icon → **Pair iPhone…**. A QR code appears.
+1. On the Mac: **Pair iPhone** in the window's sidebar (or right-click the menu bar icon → **Pair iPhone…**). A QR code appears.
    macOS asks once whether House Control may find devices on your local network: allow it.
 2. On the iPhone: **Settings** (the sliders button) → **Pair with Mac**, and point the camera at the code.
    Or press **Copy Pairing Link** on the Mac and paste it on the phone.
@@ -357,7 +360,7 @@ Home Assistant and Hue connections the Mac shared in the Keychain.
 web/      the UI: Three.js scene, panel, island, editor, AI Access window and the AI tools (Vite, plain ES modules)
 core/     what both apps share: plan store, device platforms, Mac ⇄ iPhone sync, the AI gateway, and the Smart Life
           and Tuya clients as a separate module (SwiftPM, with tests)
-macos/    the Mac shell: menu bar item, panel, island and editor windows (SwiftPM)
+macos/    the Mac app: SwiftUI app and window, menu bar item and panel, island, editor (SwiftPM)
 ios/      the iPhone shell: SwiftUI, generated into an Xcode project by XcodeGen
 scripts/  build-app.sh, build-ios.sh and ios-sim.sh build the apps, release-mac.sh makes the .dmg,
           make-icon.swift and make-dmg-background.swift draw the icon and the disk image's window
@@ -394,14 +397,15 @@ Environment variables understood by the app:
 | `HOUSE_OPEN_EDITOR=1` | Open the editor at launch (`connections`, `smartlife`, `homeassistant`, `hue` or `homekit` opens it on that screen) |
 | `HOUSE_OPEN_DEVICE=<id>` | Start the panel on that light's or AC's sheet |
 | `HOUSE_PIN=1` | Keep the panel open when it loses focus |
-| `HOUSE_DOCK=1` | Show a Dock icon, so UI automation tools can see the app |
+| `HOUSE_NO_WINDOW=1` | Do not open the main window at launch (as when started at login) |
+| `HOUSE_OPEN_SETTINGS=1` | Open Settings at launch |
 | `HOUSE_ISLAND=0` | Run without the island (`1` forces it on) |
 | `HOUSE_ISLAND_EXPANDED=1` | Keep the island open |
-| `HOUSE_OPEN_PAIRING=1` | Open the Pair iPhone window at launch |
+| `HOUSE_OPEN_PAIRING=1` | Open the window on Pair iPhone at launch |
 | `HOUSE_COMPUTER_NAME="Studio Mac"` | The name paired iPhones see, instead of the Mac's own (screenshots) |
-| `HOUSE_SNAPSHOT_DIR=/some/folder` | Write `panel.png` and `island.png` there a few seconds after launch |
+| `HOUSE_SNAPSHOT_DIR=/some/folder` | Write `panel.png`, `island.png` and `main.png` (the window) there a few seconds after launch |
 | `HOUSE_RENDER_HIDDEN=1` | Keep drawing while the screen is locked, for unattended captures |
-| `HOUSE_OPEN_AGENT=1` | Open the AI Access window at launch (`start` also starts the link) |
+| `HOUSE_OPEN_AGENT=1` | Open the window on AI Access at launch (`start` also starts the link) |
 | `HOUSE_AGENT_REACH=local` | Serve AI Access on this Mac only for one run (`internet` for the tunnel) |
 | `HOUSE_AGENT_LINK_FILE=/some/file` | Write the live AI Access link there, for scripted tests |
 | `HOUSE_EVAL_DIR=/some/folder` | Scripted UI checks: a `panel.js` / `editor.js` / `island.js` dropped there runs in that page (as an async function body) and its result is written to `<mode>.json` |

@@ -11,7 +11,7 @@ Everything you do not link stays simulated.
 | **Philips Hue** | ✓ | ✓ (from the Mac) | The Hue Bridge's own API, on your network | Press the bridge's button once |
 | **Apple Home** | Linking only | ✓ | HomeKit, on the iPhone | Allow access to your Home data |
 
-On the Mac all four are set up in the editor: right-click the menu bar icon → **Edit Home… → Connections**. Then
+On the Mac all four are set up in the editor: **Connections…** in the window's sidebar (or right-click the menu bar icon → **Edit Home… → Connections**). Then
 select a lamp or an AC on the plan, choose its device under **Real device**, and press **Save & apply**. Picking a
 lamp fills in what it can do (dimming, white temperature, colour); picking an AC takes over its temperature range.
 
@@ -64,7 +64,7 @@ so a different device answering at that address later is refused.
 Apple offers HomeKit to iPhone and iPad apps, and to Mac apps only through the Mac App Store. House Control is a
 download, so on the Mac it can list Apple Home devices but not switch them:
 
-1. Pair your iPhone with the Mac (right-click the menu bar icon → **Pair iPhone…**).
+1. Pair your iPhone with the Mac (**Pair iPhone** in the window's sidebar, or right-click the menu bar icon → **Pair iPhone…**).
 2. On the iPhone: **Settings → More connections → Apple Home → Connect**, and allow access to your Home data.
 3. The iPhone sends the list of your lamps, outlets, air conditioners (heater-coolers and thermostats) and
    thermometers to the Mac. Link them in the editor like any other device.

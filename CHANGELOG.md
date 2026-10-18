@@ -5,6 +5,18 @@ What changed in each release of House Control. The Mac app is on
 
 ## Unreleased
 
+### A Mac app with a window
+
+- **House Control has a window and a Dock icon.** The home in 3D with all its controls (on a wide window the
+  controls sit in a column beside the model), and in the sidebar **AI Access**, **Pair iPhone**, **Edit Home…**,
+  **Connections…** and **Settings…**. The menu bar icon and its panel stay as they were, one click away from any app;
+  the panel and the window show the same home, which moves between them.
+- **Settings** (⌘,): Open at Login, the island, the floor plan files, About.
+- Opened by hand the app shows its window; started at login it waits in the menu bar. Closing the window keeps it
+  running; its Dock icon brings the window back.
+- **Needs macOS 26 Tahoe.** Version 1.0 keeps working on macOS 13 to 15.
+- The island now shows the same controls as the panel for real air conditioners, and follows what the widgets change.
+
 ### The view from outside, for planning security cameras
 
 - **Outside view:** the trees button shows the whole house on its plot, in daylight, with a roof, and lets you walk
