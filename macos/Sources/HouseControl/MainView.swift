@@ -13,29 +13,39 @@ struct MainView: View {
                 Label("Connections", systemImage: "link").tag(MainSection.connections)
 
                 Section("Access") {
-                Label {
-                    HStack {
-                        Text("AI Access")
-                        Spacer()
-                        if model.agentLive { LiveBadge() }
-                    }
-                } icon: { Image(systemName: "sparkles") }
-                    .tag(MainSection.agent)
-                Label {
-                    HStack {
-                        Text("Pair iPhone")
-                        Spacer()
-                        if !model.connectedDevices.isEmpty {
-                            Text("\(model.connectedDevices.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    Label {
+                        HStack(spacing: 8) {
+                            Text("AI Access")
+                            Spacer(minLength: 0)
+                            if model.agentLive { LiveBadge() }
                         }
-                    }
-                } icon: { Image(systemName: "iphone") }
-                    .tag(MainSection.pairing)
+                    } icon: { Image(systemName: "sparkles") }
+                        .tag(MainSection.agent)
+                    Label {
+                        HStack(spacing: 8) {
+                            Text("Pair iPhone")
+                            Spacer(minLength: 0)
+                            if !model.connectedDevices.isEmpty {
+                                Text("\(model.connectedDevices.count)")
+                                    .font(.caption2.weight(.semibold).monospacedDigit())
+                                    .foregroundStyle(Theme.muted)
+                                    .padding(.horizontal, 6).padding(.vertical, 2)
+                                    .background(Theme.surfaceHigh, in: Capsule())
+                                    .accessibilityLabel("\(model.connectedDevices.count) connected iPhones")
+                            }
+                        }
+                    } icon: { Image(systemName: "iphone") }
+                        .tag(MainSection.pairing)
                 }
 
                 Section {
                     Label("Settings", systemImage: "gearshape").tag(MainSection.settings)
                 }
+            }
+            .listStyle(.sidebar)
+            .tint(Theme.accent)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                SidebarStatus(model: model)
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
         } detail: {
@@ -90,7 +100,7 @@ private struct AgentView: View {
         WebSlot { slot, present in model.agentSlot(slot, present: present) }
             .frame(maxWidth: 640)
             .frame(maxWidth: .infinity)
-            .background(Color(red: 0.035, green: 0.043, blue: 0.08))
+            .background(Color(red: 7 / 255, green: 9 / 255, blue: 15 / 255))
             .navigationTitle("AI Access")
     }
 }
@@ -102,7 +112,39 @@ private struct LiveBadge: View {
             .font(.caption2.weight(.semibold))
             .padding(.horizontal, 6)
             .padding(.vertical, 1)
-            .background(.green.opacity(0.22), in: Capsule())
-            .foregroundStyle(.green)
+            .background(Theme.green.opacity(0.14), in: Capsule())
+            .foregroundStyle(Theme.green)
+    }
+}
+
+/// The home's name and a quiet summary, always visible below navigation.
+private struct SidebarStatus: View {
+    let model: AppModel
+
+    private var summary: String {
+        let lights = model.lastSummary["lightsOn"] as? Int ?? 0
+        let ac = model.lastSummary["acOn"] as? Int ?? 0
+        var parts: [String] = []
+        if lights > 0 { parts.append("\(lights) \(lights == 1 ? "light" : "lights") on") }
+        if ac > 0 {
+            if let target = model.lastSummary["acTarget"] as? Int {
+                parts.append("AC \(target)°")
+            } else {
+                parts.append("AC on")
+            }
+        }
+        return parts.isEmpty ? "Everything off" : parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(model.homeName).font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.text).lineLimit(1)
+            Text(summary).font(.system(size: 11)).foregroundStyle(Theme.muted)
+                .lineLimit(1).minimumScaleFactor(0.85)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .overlay(alignment: .top) { Rectangle().fill(Theme.line).frame(height: 1) }
     }
 }

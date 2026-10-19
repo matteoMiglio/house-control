@@ -26,11 +26,14 @@ struct StatusLine: View {
 
     var body: some View {
         if !text.isEmpty {
-            HStack(alignment: .firstTextBaseline, spacing: 7) {
-                Circle().fill(active ? Color.green : Color.secondary.opacity(0.5)).frame(width: 8, height: 8)
-                Text(text).font(.callout.weight(.medium)).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Circle().fill(active ? Theme.green : Theme.faint).frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
+                Text(text).font(.callout.weight(.medium)).foregroundStyle(active ? Theme.text : Theme.muted)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: 320)
+            .frame(maxWidth: .infinity) // centred, like the code and the buttons around it
         }
     }
 }
@@ -41,23 +44,69 @@ struct PairingView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 18) {
-                Text("Scan with House Control on your iPhone").font(.title3.weight(.semibold))
+            VStack(spacing: 24) {
+                VStack(spacing: 8) {
+                    Text("Pair iPhone").font(.system(size: 28, weight: .bold))
+                    Text("Your home, in sync on your Mac and iPhone.")
+                        .font(.callout).foregroundStyle(Theme.muted)
+                }
+                .multilineTextAlignment(.center)
+
                 if let link = model.pairingLink { QRCard(content: link) }
-                Text("On the iPhone open Settings → Pair with Mac. Both devices must be on the same Wi-Fi. Your floor plan, device links and connections stay the same on both, whichever one you edit; they travel straight between them, encrypted with the key in this code.")
-                    .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 380)
+
+                VStack(spacing: 10) {
+                    SectionTitle("How to pair")
+                    Card(padding: 18) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            PairingStep(number: 1, text: "Open House Control on your iPhone.")
+                            PairingStep(number: 2, text: "Go to Settings → Pair with Mac.")
+                            PairingStep(number: 3, text: "Point the camera at this code.")
+                        }
+                    }
+                    Text("Keep both devices on the same Wi-Fi. Your floor plan and connections sync directly, encrypted with the key in this code.")
+                        .font(.caption).foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 6)
+                }
+
                 StatusLine(text: model.pairingStatus.text, active: model.pairingStatus.active)
-                HStack(spacing: 10) {
-                    Button("Copy Pairing Link") { model.copyPairingLink() }
-                    Button("Reset Pairing…") { model.resetPairing() }
+
+                HStack(spacing: 12) {
+                    Button { model.copyPairingLink() } label: {
+                        Label("Copy Pairing Link", systemImage: "doc.on.doc")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Button("Reset Pairing…", role: .destructive) { model.resetPairing() }
+                        .buttonStyle(.bordered).tint(Theme.red).foregroundStyle(Theme.red)
                 }
                 .controlSize(.large)
             }
-            .padding(40)
+            .frame(maxWidth: 440)
+            .padding(32)
             .frame(maxWidth: .infinity)
         }
+        .foregroundStyle(Theme.text)
+        .tint(Theme.accent)
+        .background(Theme.background)
         .navigationTitle("Pair iPhone")
         .onAppear { model.enablePairing() }
+    }
+}
+
+/// A numbered instruction beside the code.
+private struct PairingStep: View {
+    let number: Int
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("\(number)")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(Theme.accent)
+                .frame(width: 26, height: 26)
+                .background(Theme.accent.opacity(0.16), in: Circle())
+            Text(text).font(.callout).fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 
@@ -68,14 +117,24 @@ struct PhoneLoginView: View {
     let device: String
 
     var body: some View {
-        VStack(spacing: 18) {
-            Text("Scan with the Smart Life app on \(device)").font(.title3.weight(.semibold)).multilineTextAlignment(.center)
+        VStack(spacing: 20) {
+            VStack(spacing: 6) {
+                Text("Sign in to Smart Life").font(.title2.weight(.bold))
+                Text("Scan with Smart Life on \(device).")
+                    .font(.callout).foregroundStyle(Theme.muted)
+            }
+            .multilineTextAlignment(.center)
             QRCard(content: content)
-            Text("Switch to Smart Life on the iPhone, tap the scanner on its Home tab and confirm the login. Then return to House Control: this window closes once the iPhone is signed in.")
-                .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 320)
+            Card(padding: 16) {
+                Text("Open Smart Life, tap the scanner on its Home tab and confirm the login. Return to House Control when you're done; this window closes once you're signed in.")
+                    .font(.callout).foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             StatusLine(text: "Requested by \(device)", active: true)
         }
+        .foregroundStyle(Theme.text)
         .padding(EdgeInsets(top: 46, leading: 30, bottom: 26, trailing: 30))
         .frame(width: 380)
+        .background(Theme.background)
     }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import SwiftUI
 import WebKit
 
@@ -19,9 +20,9 @@ final class MainWindowController: NSObject, NSWindowDelegate {
                           backing: .buffered, defer: false)
         super.init()
         let hosting = NSHostingController(rootView: MainView(model: model))
-        hosting.sceneBridgingOptions = [.toolbars, .title]
+        hosting.sceneBridgingOptions = [.toolbars]
         window.contentViewController = hosting
-        window.title = "House Control"
+        observeHomeName(model)
         window.appearance = NSAppearance(named: .darkAqua)
         window.backgroundColor = NSColor(calibratedRed: 0.04, green: 0.055, blue: 0.1, alpha: 1)
         window.minSize = NSSize(width: 1000, height: 600) // the editor's plan, list and inspector side by side
@@ -31,6 +32,18 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         window.setContentSize(NSSize(width: 1280, height: 820))
         window.center()
         window.setFrameAutosaveName("HouseControlMain")
+    }
+
+    /// Keep the window's title with the home, whichever screen is selected.
+    private func observeHomeName(_ model: AppModel) {
+        withObservationTracking {
+            window.title = model.homeName
+        } onChange: { [weak self, weak model] in
+            Task { @MainActor in
+                guard let self, let model else { return }
+                self.observeHomeName(model)
+            }
+        }
     }
 
     var isVisible: Bool { window.isVisible && !window.isMiniaturized }
