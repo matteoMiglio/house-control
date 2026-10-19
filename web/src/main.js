@@ -189,6 +189,7 @@ async function boot() {
     }
     if (isNative) {
       items.push('-',
+        { label: 'Open House Control…', action: () => post('openWindow') },
         { label: 'Edit home…', action: () => post('openEditor') },
         { label: 'AI access…', action: () => post('openAgent') },
         { label: 'Load floor plan…', action: () => post('loadPlan') },
@@ -199,6 +200,7 @@ async function boot() {
           icon: openAtLogin === 'on' ? icon('check', 16, 2.4) : null,
           action: () => post('setOpenAtLogin', { on: openAtLogin !== 'on' }),
         },
+        { label: 'Settings…', action: () => post('openSettings') },
         { label: 'Quit House Control', action: () => post('quit') });
     }
     openMenu(panel.anchorMenu, anchor, items);

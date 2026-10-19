@@ -20,10 +20,22 @@ extension AppModel {
                 self?.mainShown = shown
                 self?.placePrimary()
             }
+            controller.onOpenChange = { [weak self] open in
+                self?.mainOpen = open
+                self?.updateDockIcon()
+            }
             mainWindow = controller
         }
         dismissPanel()
+        UserDefaults.standard.set(true, forKey: "mainWindowSeen")
         mainWindow?.show()
+    }
+
+    /// House Control is a menu bar app; while one of its windows is open (the main window, the
+    /// editor, Settings) it also has a Dock icon and a place in ⌘-Tab, like any app with a window.
+    func updateDockIcon() {
+        let policy: NSApplication.ActivationPolicy = mainOpen || editor != nil || settingsOpen ? .regular : .accessory
+        if NSApp.activationPolicy() != policy { NSApp.setActivationPolicy(policy) }
     }
 
     /// The Home view's slot came on screen (it is shown in the window) or left it.
@@ -72,8 +84,16 @@ extension AppModel {
             window.isReleasedWhenClosed = false
             window.isRestorable = false
             window.center()
+            NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.settingsOpen = false
+                    self?.updateDockIcon()
+                }
+            }
             settingsWindow = window
         }
+        settingsOpen = true
+        updateDockIcon()
         NSApp.activate()
         settingsWindow?.makeKeyAndOrderFront(nil)
     }

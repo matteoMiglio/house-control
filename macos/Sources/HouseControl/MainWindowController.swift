@@ -10,6 +10,8 @@ final class MainWindowController: NSObject, NSWindowDelegate {
     private let window: NSWindow
     /// The window came on screen (true) or left it: closed or minimised (false).
     var onVisibilityChange: ((Bool) -> Void)?
+    /// The window opened (true) or closed (false); minimised it is still open.
+    var onOpenChange: ((Bool) -> Void)?
 
     init(model: AppModel) {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 760),
@@ -34,6 +36,7 @@ final class MainWindowController: NSObject, NSWindowDelegate {
     var isVisible: Bool { window.isVisible && !window.isMiniaturized }
 
     func show() {
+        onOpenChange?(true)
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
         onVisibilityChange?(true)
@@ -58,7 +61,10 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         web.takeSnapshot(with: nil) { image, _ in write(image) }
     }
 
-    func windowWillClose(_ notification: Notification) { onVisibilityChange?(false) }
+    func windowWillClose(_ notification: Notification) {
+        onVisibilityChange?(false)
+        onOpenChange?(false)
+    }
     func windowDidMiniaturize(_ notification: Notification) { onVisibilityChange?(false) }
     func windowDidDeminiaturize(_ notification: Notification) { onVisibilityChange?(true) }
 }

@@ -54,7 +54,14 @@ private struct HomeView: View {
         WebSlot { slot, present in model.homeSlot(slot, present: present) }
             .ignoresSafeArea(.container, edges: .top)
             .navigationTitle(model.homeName)
-            .toolbar(removing: .title) // the page shows the home's name itself
+            .modifier(NoToolbarTitle())
+    }
+}
+
+/// The page shows the home's name itself, so the toolbar does not repeat it (macOS 15 and later).
+private struct NoToolbarTitle: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 15, *) { content.toolbar(removing: .title) } else { content }
     }
 }
 

@@ -45,6 +45,8 @@ extension AppModel {
             }
         case "loadPlan": loadPlan()
         case "openAgent": router.show(.agent)
+        case "openWindow": router.show(.home)
+        case "openSettings": router.show(.settings)
         case "revealPlan": revealPlan()
         case "openEditor": router.show(.editor(section: message["section"] as? String))
         case "quit": NSApp.terminate(nil)

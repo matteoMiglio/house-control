@@ -5,14 +5,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = AppModel()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        // A menu bar app: the Dock icon comes with the windows (AppModel.updateDockIcon).
+        NSApp.setActivationPolicy(.accessory)
         // Started by macOS as a login item: the app comes up in the menu bar only.
         let event = NSAppleEventManager.shared().currentAppleEvent
         model.launchedAtLogin = event?.eventID == kAEOpenApplication
             && event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
     }
 
-    /// A click on the Dock icon (or opening the app again) brings the window back.
+    /// Opening the app again (from Applications, Spotlight, or its Dock icon) brings the window.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         model.router.show(.home)
         return true

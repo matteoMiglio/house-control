@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "HouseControl",
-    platforms: [.macOS("26.0")],
+    platforms: [.macOS(.v14)],
     dependencies: [
         .package(path: "../core")
     ],

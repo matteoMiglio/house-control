@@ -21,8 +21,8 @@
 
 ## What it does
 
-- **A Mac app, one click away in the menu bar.** Its window shows the home with all its controls, AI Access and
-  iPhone pairing; click the house icon in the menu bar and the same panel drops down; click anywhere else and it is gone.
+- **Lives in the menu bar.** Click the house icon and a panel drops down; click anywhere else and it is gone.
+  When there is more to do — set up the home, AI Access, pairing an iPhone — **Open House Control** gives it a window.
 - **Your floor plan in 3D.** Rooms, walls, doors, windows and furniture are built from one JSON file.
   Lamps light the scene the way they light the room; an AC that is running blows visible air.
 - **Lights.** Tap to toggle, drag across a tile to dim, open a light for brightness, white temperature and colour.
@@ -55,15 +55,17 @@ No frameworks, no Electron, no server, no account of its own.
 ## Download
 
 1. Get `HouseControl-<version>.dmg` from [Releases](https://github.com/0xProbabillity/house-control/releases).
-   It runs on macOS 26 Tahoe or newer, Apple silicon and Intel. (Version 1.0 runs on macOS 13 and newer.)
+   It runs on macOS 14 Sonoma or newer, Apple silicon and Intel. (Version 1.0 also runs on macOS 13.)
 2. Open it and drag **House Control** into **Applications**.
 3. Open **House Control** from Applications. The first time, macOS stops it with *“Apple could not verify…”*,
    because the app is not signed with a paid Apple Developer ID (see [why](#why-the-app-is-not-notarized)).
    Allow it once:
-   Click **Done**, open **System Settings → Privacy & Security**, scroll down to *“House Control was blocked…”*,
-   click **Open Anyway** and confirm with your password.
+   - **macOS 15 Sequoia and newer:** click **Done**, open **System Settings → Privacy & Security**, scroll down
+     to *“House Control was blocked…”*, click **Open Anyway** and confirm with your password.
+   - **macOS 14:** Control-click the app in Applications, choose **Open**, then **Open** again.
    - Or, in Terminal: `xattr -dr com.apple.quarantine "/Applications/House Control.app"`
-4. Its window opens, and the house appears in the menu bar: click it for the panel, from any app.
+4. Its window opens the first time; after that it lives in the menu bar — look for the house and click it. Open
+   House Control again (from Applications, Spotlight, or the menu bar icon's menu) for its window.
 
 What is new in each release: [CHANGELOG.md](CHANGELOG.md).
 
@@ -101,8 +103,8 @@ plan and connections too, `~/Library/Application Support/HouseControl/`.
 
 | | |
 | --- | --- |
-| macOS | 26 Tahoe or newer |
-| Xcode Command Line Tools | with the macOS 26 SDK (Xcode 26) — `xcode-select --install` |
+| macOS | 14 Sonoma or newer |
+| Xcode Command Line Tools | Swift 5.9 or newer — `xcode-select --install` |
 | Node.js | 20.19+ or 22.12+ |
 | For the iPhone app | Xcode 16 or newer, [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`), iOS 17+ |
 
@@ -126,8 +128,9 @@ To keep it, drag `build/HouseControl.app` into `/Applications`. To start it with
 Login** in Settings (⌘,), the menu bar icon's right-click menu or the panel's gear menu; it shows up under
 **System Settings → General → Login Items**, where it can be switched off too.
 
-Closing the window keeps the app running in the menu bar (the panel, the island, iPhone sync and AI Access go on);
-click its Dock icon to bring the window back, ⌘Q to quit.
+House Control is a menu bar app: it has a Dock icon only while one of its windows (the main window, the editor,
+Settings) is open. Closing them keeps it running in the menu bar — the panel, the island, iPhone sync and AI Access
+go on; **Quit** in the menu bar icon's menu (or ⌘Q in a window) ends it.
 
 ## Using it
 
@@ -397,7 +400,7 @@ Environment variables understood by the app:
 | `HOUSE_OPEN_EDITOR=1` | Open the editor at launch (`connections`, `smartlife`, `homeassistant`, `hue` or `homekit` opens it on that screen) |
 | `HOUSE_OPEN_DEVICE=<id>` | Start the panel on that light's or AC's sheet |
 | `HOUSE_PIN=1` | Keep the panel open when it loses focus |
-| `HOUSE_NO_WINDOW=1` | Do not open the main window at launch (as when started at login) |
+| `HOUSE_OPEN_WINDOW=1` | Open the main window at launch (it otherwise opens by itself only the very first time) |
 | `HOUSE_OPEN_SETTINGS=1` | Open Settings at launch |
 | `HOUSE_ISLAND=0` | Run without the island (`1` forces it on) |
 | `HOUSE_ISLAND_EXPANDED=1` | Keep the island open |

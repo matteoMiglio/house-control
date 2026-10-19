@@ -68,6 +68,9 @@ final class AppModel: NSObject {
     @ObservationIgnored var primaryPlace: PrimaryPlace = .none
     /// The main window is open and not minimised, as its controller last said.
     @ObservationIgnored var mainShown = false
+    /// The main window and Settings are open (minimised counts as open): the Dock icon shows.
+    @ObservationIgnored var mainOpen = false
+    @ObservationIgnored var settingsOpen = false
     /// Counts requests to open the panel, so one still waiting for a snapshot can tell it was cancelled.
     @ObservationIgnored var panelRequest = 0
     /// The AI Access page, made the first time its screen is shown and kept from then on.
@@ -151,9 +154,10 @@ final class AppModel: NSObject {
                 self?.mainWindow?.snapshot(to: directory.appendingPathComponent("main.png"), page: self?.homeSlot)
             }
         }
-        // Opened by hand, the app shows its window; started at login it stays in the menu bar.
-        // (HOUSE_NO_WINDOW=1 does the same for scripted runs.)
-        if !launchedAtLogin, ProcessInfo.processInfo.environment["HOUSE_NO_WINDOW"] == nil {
+        // House Control lives in the menu bar; its window opens by itself only the very first
+        // time, so it is found (and with HOUSE_OPEN_WINDOW=1, for scripted runs).
+        let firstLaunch = !UserDefaults.standard.bool(forKey: "mainWindowSeen")
+        if (firstLaunch && !launchedAtLogin) || ProcessInfo.processInfo.environment["HOUSE_OPEN_WINDOW"] != nil {
             router.show(.home)
         }
         if ProcessInfo.processInfo.environment["HOUSE_OPEN_PAIRING"] != nil {
@@ -411,6 +415,7 @@ final class AppModel: NSObject {
                 host.webView.configuration.userContentController.removeScriptMessageHandler(forName: "house")
                 self?.hosts[.editor] = nil
                 self?.editor = nil
+                self?.updateDockIcon()
             }
             hosts[.editor] = host
             editor = controller
@@ -419,6 +424,7 @@ final class AppModel: NSObject {
             // Already open: it switches to the section asked for (Connections…).
             hosts[.editor]?.call("openSection", section)
         }
+        updateDockIcon()
         editor?.show()
     }
 
