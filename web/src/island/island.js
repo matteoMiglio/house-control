@@ -1,5 +1,5 @@
 // The island: a black tab that hangs from the MacBook's notch. At rest it shows how many
-// lights are on; under the pointer it springs open into a small live model of the home
+// lights are on (or, dimmed, that everything is off); under the pointer it springs open into a small live model of the home
 // with scenes and devices; when something changes elsewhere it peeks out to say so.
 import './island.css';
 import * as THREE from 'three';
@@ -200,7 +200,8 @@ export async function bootIsland(root) {
     return NAVY.clone().lerp(sum, clamp(weight / 3, 0.35, 0.9));
   }
 
-  const plainEar = (iconName, text, color) => [h('span.ear-icon', { vars: { '--c': color } }, icon(iconName, 14, 2.2)), text != null ? h('span.ear-text', text) : null];
+  const plainEar = (iconName, text, color) => [h('span.ear-icon', { vars: { '--c': color } }, icon(iconName, 14, 2.2)),
+    ...(text != null ? [h('span.ear-text', text)] : [])]; // replaceChildren would print a null as "null"
 
   let peek = null; // { left: [...nodes], right: text } while something is being announced
 
@@ -215,6 +216,10 @@ export async function bootIsland(root) {
     if (isle.dataset.state === 'peek' && peek) {
       earLeft.replaceChildren(...peek.left);
       earRight.replaceChildren(h('span.ear-text.strong', peek.right));
+    } else if (!onCount && !acOn) {
+      // Everything off: the tab still shows the home, dimmed, and says so.
+      earLeft.replaceChildren(...plainEar('home', null, '#8b93a7'));
+      earRight.replaceChildren(h('span.ear-text.off', 'Off'));
     } else {
       earLeft.replaceChildren(...(onCount ? plainEar('home', String(onCount), '#ffb46b') : acOn ? plainEar('home', null, '#8fa3c7') : []));
       earRight.replaceChildren(...(acOn ? plainEar(acOn.mode, `${acOn.target}°`, MODE_COLORS[acOn.mode]) : []));
