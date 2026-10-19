@@ -34,8 +34,11 @@ final class AppModel: NSObject {
     @ObservationIgnored var panel: PanelController!
     /// The editor's page, made the first time Edit Home or Connections is shown and kept from then on
     /// (unsaved changes and all), with the screen it was last asked for.
-    @ObservationIgnored var pendingEditorSection: String?
-    @ObservationIgnored var editorShows: MainSection?
+    /// What the editor's page is to show — "" (Edit Home), "connections" or one platform's
+    /// "service:<id>" — and what it was last told; it learns it once it is ready, and again
+    /// whenever it reloads.
+    @ObservationIgnored var editorWant = ""
+    @ObservationIgnored var editorShown: String?
     @ObservationIgnored var pollTimer: Timer?
     /// AI Access: the private link an AI assistant uses to run the home.
     @ObservationIgnored private var storedAgent: AgentController?
@@ -160,7 +163,9 @@ final class AppModel: NSObject {
         }
         // House Control lives in the menu bar; its window opens by itself only the very first
         // time, so it is found (and with HOUSE_OPEN_WINDOW=1, for scripted runs).
-        let firstLaunch = !UserDefaults.standard.bool(forKey: "mainWindowSeen")
+        // A run with its own data folder (HOUSE_DATA_DIR, for tests) leaves the real first launch alone.
+        let firstLaunch = ProcessInfo.processInfo.environment["HOUSE_DATA_DIR"] == nil
+            && !UserDefaults.standard.bool(forKey: "mainWindowSeen")
         if (firstLaunch && !launchedAtLogin) || ProcessInfo.processInfo.environment["HOUSE_OPEN_WINDOW"] != nil {
             router.show(.home)
         }
@@ -403,14 +408,8 @@ final class AppModel: NSObject {
     /// Edit Home (no section) or Connections (`connections`, or one platform's `service:<id>`),
     /// in the main window.
     private func openEditor(section: String? = nil) {
-        let screen: MainSection = section.map { !$0.isEmpty } == true ? .connections : .editor
-        if let host = hosts[.editor] {
-            host.call("openSection", section ?? "")
-            editorShows = screen
-        } else {
-            pendingEditorSection = section
-        }
-        showMainWindow(screen)
+        askEditor(section ?? "")
+        showMainWindow(editorWant.isEmpty ? .editor : .connections)
     }
 
     func alert(_ title: String, _ text: String) {

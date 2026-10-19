@@ -13,6 +13,8 @@ extension AppModel {
             if message["type"] as? String == "ready", host !== hosts[.primary] {
                 hosts[.primary]?.call("share")
             }
+            // The editor's page catches up with a screen asked for while it was loading.
+            if message["type"] as? String == "ready", host === hosts[.editor] { showEditorWant() }
             if message["type"] as? String == "ready", host === hosts[.primary] {
                 widgets.isReady = true
                 router.markReady()

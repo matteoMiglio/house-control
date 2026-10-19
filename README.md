@@ -138,7 +138,7 @@ go on; **Quit** in the menu bar icon's menu (or ⌘Q in a window) ends it.
 | Click the menu bar icon | Open or close the panel |
 | Right-click the menu bar icon | Open House Control, Edit Home, Load Floor Plan, Reveal Plan File, Reveal Device Log, Show Island, Open at Login, Pair iPhone, AI Access, Settings, Reload, Quit |
 | In the window's sidebar | Home, Edit Home, Connections, AI Access, Pair iPhone, Settings |
-| In the editor's plan | Pinch (or ⌘-scroll) to zoom, scroll to move around, ⌘0 for the whole plan |
+| In the editor's plan | Pinch (or ⌘-scroll) to zoom, scroll or drag with Space held to move around, ⌘0 for the whole plan |
 | Click a lamp in the 3D view, or its tile | Toggle it |
 | Drag sideways across a light tile | Dim it |
 | Click the sliders icon on a light tile | Brightness, white temperature, colour |

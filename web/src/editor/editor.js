@@ -541,8 +541,25 @@ export async function bootEditor(root) {
     return { x: b.minX - m, y: b.minZ - m, w: b.maxX - b.minX + m * 2, h: b.maxZ - b.minZ + m * 2 };
   };
   function applyPlanView() {
+    if (planView) {
+      // However far it is scrolled or zoomed, the middle of the view stays over the plan: the
+      // home never slides out of sight.
+      const all = wholePlan();
+      const v = planView;
+      const cx = clamp(v.x + v.w / 2, all.x, all.x + all.w);
+      const cz = clamp(v.y + v.h / 2, all.y, all.y + all.h);
+      planView = { ...v, x: cx - v.w / 2, y: cz - v.h / 2 };
+    }
     const v = planView || wholePlan();
     plan.setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`);
+  }
+
+  // Moves the view by a distance on screen, in pixels (scrolling, or dragging with Space held).
+  function panPlan(dx, dy) {
+    const v = planView || wholePlan();
+    const scale = plan.getScreenCTM().a; // pixels per metre
+    planView = { ...v, x: v.x + dx / scale, y: v.y + dy / scale };
+    applyPlanView();
   }
   // Scales the view by `f` (under 1 zooms in) around a point of the plan, which stays where it is.
   function zoomPlan(f, at) {
@@ -791,8 +808,29 @@ export async function bootEditor(root) {
   }
 
   let drag = null;
+  // Space held down: dragging moves the view (as in drawing apps) instead of what is under it.
+  let spaceHeld = false;
+  let spacePan = null;
+  const typingNow = () => /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || '');
+  window.addEventListener('keydown', (ev) => {
+    if (ev.code !== 'Space' || isPhone || typingNow()) return;
+    ev.preventDefault();
+    if (!spaceHeld) { spaceHeld = true; plan.classList.add('panning'); }
+  });
+  window.addEventListener('keyup', (ev) => {
+    if (ev.code !== 'Space') return;
+    spaceHeld = false;
+    if (!spacePan) plan.classList.remove('panning');
+  });
+
   plan.addEventListener('pointerdown', (ev) => {
     if (isPhone) return;
+    if (spaceHeld) {
+      plan.setPointerCapture(ev.pointerId);
+      spacePan = { x: ev.clientX, y: ev.clientY };
+      plan.classList.add('grabbing');
+      return;
+    }
     const el = ev.target.closest('[data-kind]');
     const kind = el?.dataset.kind;
     if (!kind || kind === 'none') { select({ kind: 'home' }); return; }
@@ -847,19 +885,28 @@ export async function bootEditor(root) {
     }
   }
 
-  plan.addEventListener('pointermove', (ev) => { if (!isPhone) moveDrag(ev); });
+  plan.addEventListener('pointermove', (ev) => {
+    if (isPhone) return;
+    if (spacePan) {
+      panPlan(spacePan.x - ev.clientX, spacePan.y - ev.clientY);
+      spacePan = { x: ev.clientX, y: ev.clientY };
+      return;
+    }
+    moveDrag(ev);
+  });
 
   // A trackpad's pinch reaches the page as a ⌘- (ctrl-) scroll, or in WebKit as gesture events;
   // a plain scroll moves the view around.
   plan.addEventListener('wheel', (ev) => {
     if (isPhone) return;
     ev.preventDefault();
+    // Some mice scroll by lines or pages rather than pixels.
+    const unit = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? plan.clientHeight : 1;
+    const dx = ev.deltaX * unit;
+    const dy = ev.deltaY * unit;
     // A pinch comes in small steps; a mouse wheel's notch is one big one, held to about a third.
-    if (ev.ctrlKey || ev.metaKey) { zoomPlan(Math.exp(clamp(ev.deltaY, -40, 40) * 0.01), planPoint(ev)); return; }
-    const v = planView || wholePlan();
-    const scale = plan.getScreenCTM().a; // pixels per metre
-    planView = { ...v, x: v.x + ev.deltaX / scale, y: v.y + ev.deltaY / scale };
-    applyPlanView();
+    if (ev.ctrlKey || ev.metaKey) { zoomPlan(Math.exp(clamp(dy, -40, 40) * 0.01), planPoint(ev)); return; }
+    panPlan(dx, dy);
   }, { passive: false });
   let pinchFrom = null;
   plan.addEventListener('gesturestart', (ev) => {
@@ -945,8 +992,13 @@ export async function bootEditor(root) {
     // Fit the view again, and bring the coverage up to date.
     if (moved) { renderSidebar(); renderPlan(); renderInspector(); }
   };
-  plan.addEventListener('pointerup', () => { if (!isPhone) endDrag(); });
-  plan.addEventListener('pointercancel', () => { if (!isPhone) endDrag(); });
+  const endPan = () => {
+    spacePan = null;
+    plan.classList.remove('grabbing');
+    if (!spaceHeld) plan.classList.remove('panning');
+  };
+  plan.addEventListener('pointerup', () => { if (!isPhone) { endPan(); endDrag(); } });
+  plan.addEventListener('pointercancel', () => { if (!isPhone) { endPan(); endDrag(); } });
 
   /* ---------- inspector ---------- */
 
@@ -1481,6 +1533,7 @@ export async function bootEditor(root) {
       }
       snapshot();
       doc = json;
+      planView = null; // a new plan: show all of it
       for (const key of Object.values(KEYS)) doc[key] ||= [];
       nameInput.value = doc.name || 'Home';
       sel = { kind: 'home' };
@@ -1832,6 +1885,7 @@ export async function bootEditor(root) {
       return;
     }
     doc = structuredClone(config);
+    planView = null; // a new plan: show all of it
     for (const key of Object.values(KEYS)) doc[key] ||= [];
     nameInput.value = doc.name || 'Home';
     if (sel.index != null && !doc[KEYS[sel.kind]]?.[sel.index]) sel = { kind: 'home' };

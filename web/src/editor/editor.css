@@ -513,3 +513,5 @@ g.p-out.sel rect { stroke: #6aa6ff; stroke-width: 0.1; }
 .zoom button { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); }
 .zoom button:hover { color: var(--text); background: rgba(255, 255, 255, 0.08); }
 .editor.phone .zoom { display: none; }
+.plan.panning, .plan.panning * { cursor: grab !important; }
+.plan.grabbing, .plan.grabbing * { cursor: grabbing !important; }
