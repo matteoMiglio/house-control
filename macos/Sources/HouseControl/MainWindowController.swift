@@ -20,8 +20,11 @@ final class MainWindowController: NSObject, NSWindowDelegate {
                           backing: .buffered, defer: false)
         super.init()
         let hosting = NSHostingController(rootView: MainView(model: model))
-        hosting.sceneBridgingOptions = [.toolbars]
+        // No toolbar (it had nothing in it): just the title bar's traffic lights, above the content.
+        hosting.sceneBridgingOptions = []
         window.contentViewController = hosting
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
         observeHomeName(model)
         window.appearance = NSAppearance(named: .darkAqua)
         window.backgroundColor = NSColor(calibratedRed: 0.04, green: 0.055, blue: 0.1, alpha: 1)

@@ -77,18 +77,7 @@ private struct HomeView: View {
     let model: AppModel
 
     var body: some View {
-        // Up under the window's transparent title bar, but beside the sidebar, never under it.
         WebSlot { slot, present in model.homeSlot(slot, present: present) }
-            .ignoresSafeArea(.container, edges: .top)
-            .navigationTitle(model.homeName)
-            .modifier(NoToolbarTitle())
-    }
-}
-
-/// The page shows the home's name itself, so the toolbar does not repeat it (macOS 15 and later).
-private struct NoToolbarTitle: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(macOS 15, *) { content.toolbar(removing: .title) } else { content }
     }
 }
 
