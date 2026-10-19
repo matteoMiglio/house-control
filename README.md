@@ -128,8 +128,7 @@ To keep it, drag `build/HouseControl.app` into `/Applications`. To start it with
 Login** in Settings (⌘,), the menu bar icon's right-click menu or the panel's gear menu; it shows up under
 **System Settings → General → Login Items**, where it can be switched off too.
 
-House Control is a menu bar app: it has a Dock icon only while one of its windows (the main window, Settings) is
-open. Closing them keeps it running in the menu bar — the panel, the island, iPhone sync and AI Access
+House Control is a menu bar app: it has a Dock icon only while its window is open. Closing them keeps it running in the menu bar — the panel, the island, iPhone sync and AI Access
 go on; **Quit** in the menu bar icon's menu (or ⌘Q in a window) ends it.
 
 ## Using it
@@ -138,7 +137,7 @@ go on; **Quit** in the menu bar icon's menu (or ⌘Q in a window) ends it.
 | --- | --- |
 | Click the menu bar icon | Open or close the panel |
 | Right-click the menu bar icon | Open House Control, Edit Home, Load Floor Plan, Reveal Plan File, Reveal Device Log, Show Island, Open at Login, Pair iPhone, AI Access, Settings, Reload, Quit |
-| In the window's sidebar | Home, Edit Home, Connections, AI Access, Pair iPhone; Settings… |
+| In the window's sidebar | Home, Edit Home, Connections, AI Access, Pair iPhone, Settings |
 | Click a lamp in the 3D view, or its tile | Toggle it |
 | Drag sideways across a light tile | Dim it |
 | Click the sliders icon on a light tile | Brightness, white temperature, colour |
@@ -401,7 +400,7 @@ Environment variables understood by the app:
 | `HOUSE_OPEN_DEVICE=<id>` | Start the panel on that light's or AC's sheet |
 | `HOUSE_PIN=1` | Keep the panel open when it loses focus |
 | `HOUSE_OPEN_WINDOW=1` | Open the main window at launch (it otherwise opens by itself only the very first time) |
-| `HOUSE_OPEN_SETTINGS=1` | Open Settings at launch |
+| `HOUSE_OPEN_SETTINGS=1` | Open the window on Settings at launch |
 | `HOUSE_ISLAND=0` | Run without the island (`1` forces it on) |
 | `HOUSE_ISLAND_EXPANDED=1` | Keep the island open |
 | `HOUSE_OPEN_PAIRING=1` | Open the window on Pair iPhone at launch |

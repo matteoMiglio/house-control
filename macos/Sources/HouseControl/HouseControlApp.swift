@@ -12,8 +12,8 @@ struct HouseControlApp: App {
     }
 
     var body: some Scene {
-        // The app's windows are AppKit windows hosting SwiftUI (see MainWindowController); this
-        // scene is only here to give the app menu its Settings… item, which opens one of them.
+        // The app's window is an AppKit window hosting SwiftUI (see MainWindowController); this
+        // scene is only here to give the app menu its Settings… item, which opens it on Settings.
         Settings { EmptyView() }
             .commands {
                 CommandGroup(replacing: .appSettings) {

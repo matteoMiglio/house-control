@@ -14,7 +14,7 @@ final class MainWindowController: NSObject, NSWindowDelegate {
     var onOpenChange: ((Bool) -> Void)?
 
     init(model: AppModel) {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1120, height: 760),
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                           backing: .buffered, defer: false)
         super.init()
@@ -28,7 +28,7 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.isRestorable = false
         window.delegate = self
-        window.setContentSize(NSSize(width: 1120, height: 760))
+        window.setContentSize(NSSize(width: 1280, height: 820))
         window.center()
         window.setFrameAutosaveName("HouseControlMain")
     }

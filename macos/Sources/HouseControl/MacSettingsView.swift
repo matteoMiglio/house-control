@@ -1,7 +1,7 @@
 import SwiftUI
 import HouseCore
 
-/// House Control → Settings… (⌘,).
+/// Settings: a screen of the main window (⌘, or Settings… in the menus).
 struct MacSettingsView: View {
     @Bindable var model: AppModel
 
@@ -34,7 +34,11 @@ struct MacSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480)
-        .fixedSize(horizontal: false, vertical: true)
+        .scrollContentBackground(.hidden)
+        .frame(maxWidth: 560)
+        .frame(maxWidth: .infinity)
+        // One colour behind the form and beside it (not the window's dark blue).
+        .background(Color(nsColor: .windowBackgroundColor))
+        .navigationTitle("Settings")
     }
 }

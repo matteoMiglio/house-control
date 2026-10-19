@@ -34,7 +34,7 @@ struct MainView: View {
                 }
 
                 Section {
-                    SidebarButton("Settings…", systemImage: "gearshape") { model.router.show(.settings) }
+                    Label("Settings", systemImage: "gearshape").tag(MainSection.settings)
                 }
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 260)
@@ -44,6 +44,7 @@ struct MainView: View {
             case .editor, .connections: EditorView(model: model, showing: model.section)
             case .agent: AgentView(model: model)
             case .pairing: PairingView(model: model)
+            case .settings: MacSettingsView(model: model)
             }
         }
     }
@@ -103,25 +104,5 @@ private struct LiveBadge: View {
             .padding(.vertical, 1)
             .background(.green.opacity(0.22), in: Capsule())
             .foregroundStyle(.green)
-    }
-}
-
-/// A sidebar row that does something (opens another window) instead of selecting a screen.
-private struct SidebarButton: View {
-    let title: String
-    let systemImage: String
-    let action: () -> Void
-
-    init(_ title: String, systemImage: String, action: @escaping () -> Void) {
-        self.title = title
-        self.systemImage = systemImage
-        self.action = action
-    }
-
-    var body: some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 }

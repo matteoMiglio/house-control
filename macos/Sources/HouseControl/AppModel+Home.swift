@@ -2,11 +2,7 @@ import AppKit
 import SwiftUI
 
 /// What the main window's sidebar shows.
-enum MainSection: Hashable {
-    case home, editor, connections, agent, pairing
-    /// Edit Home and Connections are the editor's page, which wants the whole width.
-    var isEditor: Bool { self == .editor || self == .connections }
-}
+enum MainSection: Hashable { case home, editor, connections, agent, pairing, settings }
 
 /// Where the panel page is on screen. There is one such page (its 3D model, its state, its
 /// device commands), lent to whichever of the two places shows it.
@@ -35,10 +31,10 @@ extension AppModel {
         mainWindow?.show()
     }
 
-    /// House Control is a menu bar app; while one of its windows is open (the main window, the
-    /// editor, Settings) it also has a Dock icon and a place in ⌘-Tab, like any app with a window.
+    /// House Control is a menu bar app; while its window is open it also has a Dock icon and a
+    /// place in ⌘-Tab, like any app with a window.
     func updateDockIcon() {
-        let policy: NSApplication.ActivationPolicy = mainOpen || settingsOpen ? .regular : .accessory
+        let policy: NSApplication.ActivationPolicy = mainOpen ? .regular : .accessory
         if NSApp.activationPolicy() != policy { NSApp.setActivationPolicy(policy) }
     }
 
@@ -97,31 +93,6 @@ extension AppModel {
         pendingEditorSection = nil
         editorShows = showing
         if let host = hosts[.editor] { slot.lend(host.webView) }
-    }
-
-    /// House Control → Settings… (⌘,): the SwiftUI settings in a window of their own, opened
-    /// directly like the main window (macOS gives AppKit no way to open the Settings scene).
-    func openSettings() {
-        dismissPanel()
-        if settingsWindow == nil {
-            let window = NSWindow(contentViewController: NSHostingController(rootView: MacSettingsView(model: self)))
-            window.title = "House Control Settings"
-            window.styleMask = [.titled, .closable]
-            window.isReleasedWhenClosed = false
-            window.isRestorable = false
-            window.center()
-            NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    self?.settingsOpen = false
-                    self?.updateDockIcon()
-                }
-            }
-            settingsWindow = window
-        }
-        settingsOpen = true
-        updateDockIcon()
-        NSApp.activate()
-        settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
     /// Opens the panel, taking its page from the main window if it is there: the window keeps a

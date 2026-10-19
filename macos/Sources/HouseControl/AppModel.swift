@@ -29,7 +29,6 @@ final class AppModel: NSObject {
     }
     @ObservationIgnored var island: IslandController?
     @ObservationIgnored var loginWindow: NSWindow?
-    @ObservationIgnored var settingsWindow: NSWindow?
     @ObservationIgnored var loginWindowExpiry: DispatchWorkItem?
     @ObservationIgnored var statusItem: NSStatusItem!
     @ObservationIgnored var panel: PanelController!
@@ -61,13 +60,9 @@ final class AppModel: NSObject {
     var loginState: LoginItem.State = .off
     var connectedDevices: [String] = []
     var islandShown = false
-    /// The main window's sidebar: which screen it shows, and whether it is folded away. Edit Home
-    /// and Connections fold it (the editor has a list of its own); leaving them brings it back.
-    var section: MainSection = .home {
-        didSet {
-            if section.isEditor { sidebar = .detailOnly } else if oldValue.isEditor { sidebar = .all }
-        }
-    }
+    /// The main window's sidebar: which screen it shows, and whether it is shown at all (left as
+    /// the user leaves it, with the toolbar's sidebar button).
+    var section: MainSection = .home
     var sidebar: NavigationSplitViewVisibility = .all
     /// The home's name, for the main window's title.
     var homeName = "Home"
@@ -78,9 +73,8 @@ final class AppModel: NSObject {
     @ObservationIgnored var primaryPlace: PrimaryPlace = .none
     /// The main window is open and not minimised, as its controller last said.
     @ObservationIgnored var mainShown = false
-    /// The main window and Settings are open (minimised counts as open): the Dock icon shows.
+    /// The main window is open (minimised counts as open): the Dock icon shows.
     @ObservationIgnored var mainOpen = false
-    @ObservationIgnored var settingsOpen = false
     /// Counts requests to open the panel, so one still waiting for a snapshot can tell it was cancelled.
     @ObservationIgnored var panelRequest = 0
     /// The AI Access page, made the first time its screen is shown and kept from then on.
@@ -109,7 +103,7 @@ final class AppModel: NSObject {
             case .editor(let section): self.openEditor(section: section)
             case .agent: self.showMainWindow(.agent)
             case .pairing: self.showMainWindow(.pairing)
-            case .settings: self.openSettings()
+            case .settings: self.showMainWindow(.settings)
             }
         }
         storedRouter = router
