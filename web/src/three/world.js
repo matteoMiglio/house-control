@@ -108,7 +108,7 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     scene.add(unit.group, unit.view);
   });
   const outdoorLights = config.outsideArea ? [...lights.values()].filter((u) => u.cfg.room === OUTSIDE) : [];
-  // Cut open, the model has no ground around it: only cameras on the house itself are shown.
+  // Cut open, the model has no ground around it: only lamps hung on the house itself are shown.
   const onHouse = (cfg) => cfg.pos[0] > minX - 0.4 && cfg.pos[0] < maxX + 0.4 && cfg.pos[1] > minZ - 0.4 && cfg.pos[1] < maxZ + 0.4;
   let hitTargets = [];
 
@@ -282,7 +282,8 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
   // Cameras and lamps outside the house only show when the ground around it does (or they hang on it).
   function showCameras() {
     for (const unit of cameras.values()) {
-      unit.group.visible = unit.id !== pov && (outside || onHouse(unit.cfg));
+      // Cameras belong to the view from outside; the cut-open rooms are about lamps and ACs.
+      unit.group.visible = unit.id !== pov && outside;
       unit.view.visible = outside && !pov;
     }
     for (const unit of outdoorLights) unit.group.visible = house.whole || onHouse(unit.cfg);

@@ -505,3 +505,11 @@ g.p-out.sel rect { stroke: #6aa6ff; stroke-width: 0.1; }
 .p-cam-view.suggested { fill-opacity: 0.06; stroke-dasharray: 0.12 0.1; stroke-opacity: 0.8; }
 .cov-row.compare em { color: var(--text); }
 .suggested-list { margin: 12px 0 10px; }
+
+/* ---------- plan zoom (Mac) ---------- */
+
+.zoom { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 4px; padding: 3px; border-radius: 11px;
+  background: rgba(16, 21, 36, 0.82); border: 1px solid var(--line); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.zoom button { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); }
+.zoom button:hover { color: var(--text); background: rgba(255, 255, 255, 0.08); }
+.editor.phone .zoom { display: none; }

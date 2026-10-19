@@ -104,7 +104,13 @@ export async function bootEditor(root) {
   const status = h('div.status');
   const saveBtn = h('button.btn.primary', { onclick: save }, icon('check', 15, 2.4), 'Save & apply');
   const hint = h('div.hint', isPhone ? 'Tap to select · drag what is selected · pinch to zoom'
-    : 'Drag rooms, lamps and furniture · drag a room’s corner to resize · everything snaps to 5 cm');
+    : 'Drag rooms, lamps and furniture · pinch or ⌘-scroll to zoom, scroll to move around · everything snaps to 5 cm');
+  // Zoom for the plan on the Mac (the phone pinches and pans its own way, see buildPhoneLayout).
+  const zoomTool = (name, label, onclick) => h('button', { 'aria-label': label, title: label, onclick }, icon(name, 15, 2.2));
+  const zoomBar = h('div.zoom',
+    zoomTool('minus', 'Zoom out (⌘−)', () => zoomPlan(1.25)),
+    zoomTool('fit', 'Show the whole plan (⌘0)', () => { planView = null; applyPlanView(); }),
+    zoomTool('plus', 'Zoom in (⌘+)', () => zoomPlan(0.8)));
   const toastEl = h('div.toast');
 
   const sidebar = h('aside.side');
@@ -127,7 +133,7 @@ export async function bootEditor(root) {
         h('button.btn', { onclick: exportPlan }, 'Export…'),
         saveBtn)),
     sidebar,
-    h('main.canvas', plan, hint),
+    h('main.canvas', plan, zoomBar, hint),
     h('aside.right', h('div.preview-wrap', previewHost, chips), inspector),
     h('footer.foot', status),
     toastEl));
@@ -527,12 +533,32 @@ export async function bootEditor(root) {
 
   const isSel = (kind, index) => sel.kind === kind && sel.index === index;
 
-  function renderPlan() {
+  // The Mac's plan view: null shows the whole plan; zooming and scrolling give it a box of its own.
+  let planView = null;
+  const wholePlan = () => {
     const b = bounds();
     const m = 1.4;
+    return { x: b.minX - m, y: b.minZ - m, w: b.maxX - b.minX + m * 2, h: b.maxZ - b.minZ + m * 2 };
+  };
+  function applyPlanView() {
+    const v = planView || wholePlan();
+    plan.setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`);
+  }
+  // Scales the view by `f` (under 1 zooms in) around a point of the plan, which stays where it is.
+  function zoomPlan(f, at) {
+    const v = planView || wholePlan();
+    const w = clamp(v.w * f, 2, wholePlan().w * 4); // from a couple of metres across to four times the plan
+    const k = w / v.w;
+    const [px, pz] = at || [v.x + v.w / 2, v.y + v.h / 2];
+    planView = { x: px - (px - v.x) * k, y: pz - (pz - v.y) * k, w, h: v.h * k };
+    applyPlanView();
+  }
+
+  function renderPlan() {
+    const b = bounds();
     if (isPhone) phone.applyView();
     // The view holds still while something is dragged, or the plan would slide away under the pointer.
-    else if (!drag) plan.setAttribute('viewBox', `${b.minX - m} ${b.minZ - m} ${b.maxX - b.minX + m * 2} ${b.maxZ - b.minZ + m * 2}`);
+    else if (!drag) applyPlanView();
     // Fingers are bigger than a mouse pointer: on a phone small things get a wider target.
     const big = isPhone;
     const kids = [
@@ -822,6 +848,32 @@ export async function bootEditor(root) {
   }
 
   plan.addEventListener('pointermove', (ev) => { if (!isPhone) moveDrag(ev); });
+
+  // A trackpad's pinch reaches the page as a ⌘- (ctrl-) scroll, or in WebKit as gesture events;
+  // a plain scroll moves the view around.
+  plan.addEventListener('wheel', (ev) => {
+    if (isPhone) return;
+    ev.preventDefault();
+    // A pinch comes in small steps; a mouse wheel's notch is one big one, held to about a third.
+    if (ev.ctrlKey || ev.metaKey) { zoomPlan(Math.exp(clamp(ev.deltaY, -40, 40) * 0.01), planPoint(ev)); return; }
+    const v = planView || wholePlan();
+    const scale = plan.getScreenCTM().a; // pixels per metre
+    planView = { ...v, x: v.x + ev.deltaX / scale, y: v.y + ev.deltaY / scale };
+    applyPlanView();
+  }, { passive: false });
+  let pinchFrom = null;
+  plan.addEventListener('gesturestart', (ev) => {
+    if (isPhone) return;
+    ev.preventDefault();
+    pinchFrom = { view: planView || wholePlan(), at: planPoint(ev) };
+  });
+  plan.addEventListener('gesturechange', (ev) => {
+    if (isPhone || !pinchFrom) return;
+    ev.preventDefault();
+    planView = pinchFrom.view;
+    zoomPlan(1 / ev.scale, pinchFrom.at);
+  });
+  plan.addEventListener('gestureend', () => { pinchFrom = null; });
 
   function moveDrag(ev) {
     if (!drag) return;
@@ -1456,6 +1508,9 @@ export async function bootEditor(root) {
     if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'z' && !typing) {
       ev.preventDefault();
       if (ev.shiftKey) stepHistory(redo, undo); else stepHistory(undo, redo);
+    } else if ((ev.metaKey || ev.ctrlKey) && ['=', '+', '-', '0'].includes(ev.key) && !isPhone) {
+      ev.preventDefault();
+      if (ev.key === '0') { planView = null; applyPlanView(); } else zoomPlan(ev.key === '-' ? 1.25 : 0.8);
     } else if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 's') {
       ev.preventDefault();
       save();

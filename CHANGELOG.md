@@ -15,6 +15,9 @@ What changed in each release of House Control. The Mac app is on
   while it is open.
 - **Settings** (in the sidebar, ⌘, or the gear menu): Open at Login, the island, the floor plan files, About.
 - **Needs macOS 14 Sonoma.** Version 1.0 keeps working on macOS 13.
+- **Zoom in the editor on the Mac:** pinch (or ⌘-scroll) to zoom the plan around the pointer, scroll to move
+  around it, ⌘+ / ⌘− / ⌘0 and buttons in its corner.
+- **Cameras only show from outside:** the cut-open rooms no longer show the ones hung on the house.
 - **The island says when everything is off:** a dimmed house and *Off*, instead of hiding behind the notch.
 - The island now shows the same controls as the panel for real air conditioners, and follows what the widgets change.
 
