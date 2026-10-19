@@ -77,7 +77,10 @@ private struct HomeView: View {
     let model: AppModel
 
     var body: some View {
+        // Up under the title bar, so the page's own colours fill it; the page's header lies level
+        // with the sidebar's first row.
         WebSlot { slot, present in model.homeSlot(slot, present: present) }
+            .ignoresSafeArea(.container, edges: .top)
     }
 }
 
