@@ -12,9 +12,11 @@ struct HouseControlApp: App {
     }
 
     var body: some Scene {
-        // The app's window is an AppKit window hosting SwiftUI (see MainWindowController); this
-        // scene is only here to give the app menu its Settings… item, which opens it on Settings.
-        Settings { EmptyView() }
+        // The app's window is an AppKit window hosting SwiftUI (see MainWindowController) and its
+        // menu bar icon an AppKit status item. An App still needs a scene: this one is never put in
+        // the menu bar, so it makes no window (an empty Settings scene opened one at launch), and
+        // it gives the app menu its Settings… item, which opens the window on Settings.
+        MenuBarExtra("House Control", systemImage: "house", isInserted: .constant(false)) { EmptyView() }
             .commands {
                 CommandGroup(replacing: .appSettings) {
                     Button("Settings…") { delegate.model.router.show(.settings) }.keyboardShortcut(",")
