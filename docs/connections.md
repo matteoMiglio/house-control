@@ -11,7 +11,7 @@ Everything you do not link stays simulated.
 | **Philips Hue** | ✓ | ✓ (from the Mac) | The Hue Bridge's own API, on your network | Press the bridge's button once |
 | **Apple Home** | Linking only | ✓ | HomeKit, on the iPhone | Allow access to your Home data |
 
-On the Mac all four are set up in the editor: **Connections…** in the window's sidebar (or right-click the menu bar icon → **Edit Home… → Connections**). Then
+On the Mac all four are set up in the editor: **Connections** in the window's sidebar (or right-click the menu bar icon → **Edit Home… → Connections**). Then
 select a lamp or an AC on the plan, choose its device under **Real device**, and press **Save & apply**. Picking a
 lamp fills in what it can do (dimming, white temperature, colour); picking an AC takes over its temperature range.
 

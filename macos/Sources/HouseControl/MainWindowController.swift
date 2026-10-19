@@ -24,7 +24,7 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         window.title = "House Control"
         window.appearance = NSAppearance(named: .darkAqua)
         window.backgroundColor = NSColor(calibratedRed: 0.04, green: 0.055, blue: 0.1, alpha: 1)
-        window.minSize = NSSize(width: 780, height: 560)
+        window.minSize = NSSize(width: 1000, height: 600) // the editor's plan, list and inspector side by side
         window.isReleasedWhenClosed = false
         window.isRestorable = false
         window.delegate = self

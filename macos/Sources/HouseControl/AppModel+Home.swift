@@ -2,7 +2,11 @@ import AppKit
 import SwiftUI
 
 /// What the main window's sidebar shows.
-enum MainSection: Hashable { case home, agent, pairing }
+enum MainSection: Hashable {
+    case home, editor, connections, agent, pairing
+    /// Edit Home and Connections are the editor's page, which wants the whole width.
+    var isEditor: Bool { self == .editor || self == .connections }
+}
 
 /// Where the panel page is on screen. There is one such page (its 3D model, its state, its
 /// device commands), lent to whichever of the two places shows it.
@@ -34,7 +38,7 @@ extension AppModel {
     /// House Control is a menu bar app; while one of its windows is open (the main window, the
     /// editor, Settings) it also has a Dock icon and a place in ⌘-Tab, like any app with a window.
     func updateDockIcon() {
-        let policy: NSApplication.ActivationPolicy = mainOpen || editor != nil || settingsOpen ? .regular : .accessory
+        let policy: NSApplication.ActivationPolicy = mainOpen || settingsOpen ? .regular : .accessory
         if NSApp.activationPolicy() != policy { NSApp.setActivationPolicy(policy) }
     }
 
@@ -71,6 +75,28 @@ extension AppModel {
             host.load()
         }
         if let host = agentPage { slot.lend(host.webView) }
+    }
+
+    /// Edit Home or Connections came on screen: it shows the editor's page, made the first time,
+    /// switched to the screen asked for if it was showing the other one.
+    func editorSlot(_ slot: WebSlotView, present: Bool, showing: MainSection) {
+        guard present else { return }
+        if let host = hosts[.editor] {
+            if editorShows != showing { host.call("openSection", showing == .connections ? "connections" : "") }
+        } else {
+            let start = pendingEditorSection ?? (showing == .connections ? "connections" : nil)
+            let host = WebHost(mode: "editor", transparent: false) { [unowned self] in
+                var boot = self.bootPayload()
+                if let start { boot["section"] = start }
+                return boot
+            }
+            host.onMessage = { [weak self, unowned host] message in self?.handle(message, from: host) }
+            hosts[.editor] = host
+            host.load()
+        }
+        pendingEditorSection = nil
+        editorShows = showing
+        if let host = hosts[.editor] { slot.lend(host.webView) }
     }
 
     /// House Control → Settings… (⌘,): the SwiftUI settings in a window of their own, opened

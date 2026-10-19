@@ -8,7 +8,7 @@ every device in the plan is simulated.
 You need the phone app with your devices already added to it. No Tuya developer account is required.
 
 1. In the phone app: **Me → ⚙ Settings → Account and Security**. Copy the **User Code** at the bottom of the screen.
-2. In House Control: **Connections…** in the window's sidebar → **Smart Life** (or right-click the menu bar icon → **Edit Home… → Connections → Smart Life**). Enter the User Code and press **Show QR code**.
+2. In House Control: **Connections** in the window's sidebar → **Smart Life** (or right-click the menu bar icon → **Edit Home… → Connections → Smart Life**). Enter the User Code and press **Show QR code**.
 3. Scan the code with the phone app (the scanner icon on its Home tab) and confirm.
 4. The editor lists the devices of the account.
 

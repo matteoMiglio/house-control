@@ -9,8 +9,9 @@ What changed in each release of House Control. The Mac app is on
 
 - **Open House Control** (in the menu bar icon's menu and the panel's gear menu, or open the app again) gives it a
   window: the home in 3D with all its controls (on a wide window the controls sit in a column beside the model), and
-  in the sidebar **AI Access**, **Pair iPhone**, **Edit Home…**, **Connections…** and **Settings…**. The panel and
-  the window show the same home, which moves between them.
+  in the sidebar **Edit Home** and **Connections** (the editor, at the window's full width), **AI Access**, **Pair
+  iPhone** and **Settings…**. The panel and the window show the same home, which moves between them. The editor
+  keeps unsaved changes when you switch to another screen.
 - It stays a menu bar app: the window opens by itself only the very first time, and the Dock icon is there only
   while one of its windows is open.
 - **Settings** (⌘, in a window, or the gear menu): Open at Login, the island, the floor plan files, About.

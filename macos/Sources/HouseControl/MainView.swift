@@ -1,14 +1,18 @@
 import SwiftUI
 
 /// The app's main window: the home in 3D with its controls, and in the sidebar what else the
-/// app does — AI Access, pairing an iPhone, editing the home.
+/// app does — editing the home and its connections, AI Access, pairing an iPhone.
 struct MainView: View {
     @Bindable var model: AppModel
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $model.sidebar) {
             List(selection: $model.section) {
                 Label("Home", systemImage: "house").tag(MainSection.home)
+                Label("Edit Home", systemImage: "square.and.pencil").tag(MainSection.editor)
+                Label("Connections", systemImage: "link").tag(MainSection.connections)
+
+                Section("Access") {
                 Label {
                     HStack {
                         Text("AI Access")
@@ -27,10 +31,9 @@ struct MainView: View {
                     }
                 } icon: { Image(systemName: "iphone") }
                     .tag(MainSection.pairing)
+                }
 
-                Section("Set Up") {
-                    SidebarButton("Edit Home…", systemImage: "square.and.pencil") { model.router.show(.editor(section: nil)) }
-                    SidebarButton("Connections…", systemImage: "link") { model.router.show(.editor(section: "connections")) }
+                Section {
                     SidebarButton("Settings…", systemImage: "gearshape") { model.router.show(.settings) }
                 }
             }
@@ -38,10 +41,23 @@ struct MainView: View {
         } detail: {
             switch model.section {
             case .home: HomeView(model: model)
+            case .editor, .connections: EditorView(model: model, showing: model.section)
             case .agent: AgentView(model: model)
             case .pairing: PairingView(model: model)
             }
         }
+    }
+}
+
+/// Edit Home and Connections: the editor's page, its own list and inspector, the full width.
+private struct EditorView: View {
+    let model: AppModel
+    let showing: MainSection
+
+    var body: some View {
+        WebSlot { slot, present in model.editorSlot(slot, present: present, showing: showing) }
+            .id(showing) // a slot of its own for each, so moving between them lends the page again
+            .navigationTitle(showing == .connections ? "Connections" : "Edit Home")
     }
 }
 

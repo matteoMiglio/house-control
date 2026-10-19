@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import SwiftUI
 import UniformTypeIdentifiers
 import HouseCore
 import HouseSmartLife
@@ -32,7 +33,10 @@ final class AppModel: NSObject {
     @ObservationIgnored var loginWindowExpiry: DispatchWorkItem?
     @ObservationIgnored var statusItem: NSStatusItem!
     @ObservationIgnored var panel: PanelController!
-    @ObservationIgnored var editor: EditorController?
+    /// The editor's page, made the first time Edit Home or Connections is shown and kept from then on
+    /// (unsaved changes and all), with the screen it was last asked for.
+    @ObservationIgnored var pendingEditorSection: String?
+    @ObservationIgnored var editorShows: MainSection?
     @ObservationIgnored var pollTimer: Timer?
     /// AI Access: the private link an AI assistant uses to run the home.
     @ObservationIgnored private var storedAgent: AgentController?
@@ -57,8 +61,14 @@ final class AppModel: NSObject {
     var loginState: LoginItem.State = .off
     var connectedDevices: [String] = []
     var islandShown = false
-    /// The main window's sidebar.
-    var section: MainSection = .home
+    /// The main window's sidebar: which screen it shows, and whether it is folded away. Edit Home
+    /// and Connections fold it (the editor has a list of its own); leaving them brings it back.
+    var section: MainSection = .home {
+        didSet {
+            if section.isEditor { sidebar = .detailOnly } else if oldValue.isEditor { sidebar = .all }
+        }
+    }
+    var sidebar: NavigationSplitViewVisibility = .all
     /// The home's name, for the main window's title.
     var homeName = "Home"
     /// Set by the delegate when macOS started the app as a login item: no window opens then.
@@ -163,8 +173,10 @@ final class AppModel: NSObject {
         if ProcessInfo.processInfo.environment["HOUSE_OPEN_PAIRING"] != nil {
             router.show(.pairing)
         }
-        if ProcessInfo.processInfo.environment["HOUSE_OPEN_EDITOR"] != nil {
-            router.show(.editor(section: nil))
+        // HOUSE_OPEN_EDITOR=1, or connections|smartlife|homeassistant|hue|homekit for that screen.
+        if let open = ProcessInfo.processInfo.environment["HOUSE_OPEN_EDITOR"] {
+            let section = open == "connections" ? "connections" : ["smartlife", "homeassistant", "hue", "homekit"].contains(open) ? "service:\(open)" : nil
+            router.show(.editor(section: section))
         }
         if let open = ProcessInfo.processInfo.environment["HOUSE_OPEN_AGENT"] {
             router.show(.agent) { [weak self] in
@@ -295,7 +307,7 @@ final class AppModel: NSObject {
 
     // MARK: - Plans
 
-    private func bootPayload() -> [String: Any] {
+    func bootPayload() -> [String: Any] {
         var boot = plans.bootPayload()
         boot["tuya"] = smartLife.tuyaInfo
         var account = smartLife.smartLifeInfo
@@ -303,13 +315,6 @@ final class AppModel: NSObject {
         if !smartLife.isSmartLifeConnected, !phoneUserCode.isEmpty { account["userCode"] = phoneUserCode }
         boot["smartLife"] = account
         boot["services"] = hub.servicesInfo
-        switch ProcessInfo.processInfo.environment["HOUSE_OPEN_EDITOR"] {
-        case "smartlife": boot["section"] = "service:smartlife"
-        case "homeassistant", "hue", "homekit", "connections":
-            let section = ProcessInfo.processInfo.environment["HOUSE_OPEN_EDITOR"]!
-            boot["section"] = section == "connections" ? "connections" : "service:\(section)"
-        default: break
-        }
         boot["agentLive"] = agent.isLive
         loginState = LoginItem.state
         boot["openAtLogin"] = loginState.rawValue
@@ -401,31 +406,17 @@ final class AppModel: NSObject {
     @objc private func requestAgent() { router.show(.agent) }
     @objc private func requestPairing() { router.show(.pairing) }
 
+    /// Edit Home (no section) or Connections (`connections`, or one platform's `service:<id>`),
+    /// in the main window.
     private func openEditor(section: String? = nil) {
-        dismissPanel()
-        if editor == nil {
-            let host = WebHost(mode: "editor", transparent: false) { [unowned self] in
-                var boot = self.bootPayload()
-                if let section { boot["section"] = section }
-                return boot
-            }
-            host.onMessage = { [weak self, unowned host] message in self?.handle(message, from: host) }
-            let controller = EditorController(host: host)
-            controller.onClose = { [weak self, unowned host] in
-                host.webView.configuration.userContentController.removeScriptMessageHandler(forName: "house")
-                self?.hosts[.editor] = nil
-                self?.editor = nil
-                self?.updateDockIcon()
-            }
-            hosts[.editor] = host
-            editor = controller
-            host.load()
-        } else if let section {
-            // Already open: it switches to the section asked for (Connections…).
-            hosts[.editor]?.call("openSection", section)
+        let screen: MainSection = section.map { !$0.isEmpty } == true ? .connections : .editor
+        if let host = hosts[.editor] {
+            host.call("openSection", section ?? "")
+            editorShows = screen
+        } else {
+            pendingEditorSection = section
         }
-        updateDockIcon()
-        editor?.show()
+        showMainWindow(screen)
     }
 
     func alert(_ title: String, _ text: String) {
