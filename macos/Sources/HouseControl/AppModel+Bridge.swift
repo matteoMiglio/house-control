@@ -8,32 +8,18 @@ extension AppModel {
 
     func handle(_ message: [String: Any], from host: WebHost) {
         switch message["type"] as? String {
-        case "ready", "summary":
-            // A view that has just loaded takes over what the panel shows.
-            if message["type"] as? String == "ready", host !== hosts[.primary] {
-                hosts[.primary]?.call("share")
-            }
+        case "ready":
+            // The panel and the island draw the store's state; the store tells the menu bar icon.
+            if host === hosts[.primary] || host === hosts[.island] { stateViewReady(host, message: message) }
             // The editor's page catches up with a screen asked for while it was loading.
-            if message["type"] as? String == "ready", host === hosts[.editor] { showEditorWant() }
-            if message["type"] as? String == "ready", host === hosts[.primary] {
+            if host === hosts[.editor] { showEditorWant() }
+            if host === hosts[.primary] {
                 widgets.isReady = true
                 router.markReady()
                 primaryLoaded()
             }
-            if let summary = (message["summary"] as? [String: Any]) ?? (message["lightsOn"] != nil ? message : nil) {
-                updateStatus(summary)
-            }
-        case "state":
-            // The panel and the island are two views of one home: what changes in one is
-            // shown by the other.
-            var state = message
-            state["type"] = nil
-            for role in HostRole.allCases where role != .editor && role != .agent {
-                guard let other = hosts[role], other !== host else { continue }
-                other.call("adopt", state)
-            }
-        case "command":
-            hub.command(message) { [weak host] in host?.reply(to: message, $0) }
+        case "intent":
+            receiveIntent(message, from: host)
         case "widgets":
             if host === hosts[.primary] { widgets.publish(message) }
         case "close":

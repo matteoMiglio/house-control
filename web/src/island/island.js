@@ -317,6 +317,7 @@ export async function bootIsland(root) {
   incoming.islandState = (next) => setState(next === 'expanded' ? 'expanded' : 'collapsed');
   incoming.adopt = (other) => store.adopt(other);
   incoming.applyRemote = (remote) => store.applyRemote(remote);
+  incoming.sync = (next) => store.sync(next);
 
   // The order the parts of the open island come in: header, model, scenes, devices.
   const stagger = (el, ms) => { el.classList.add('reveal'); el.style.setProperty('--d', `${Math.round(ms)}ms`); };

@@ -377,6 +377,9 @@ The shared package has unit tests, including the sync over a real TLS connection
 cd core && swift test
 ```
 
+With only the Command Line Tools installed (no Xcode, so no XCTest), `HOUSE_NO_XCTEST=1 swift test` runs the Swift
+Testing suites alone.
+
 Work on the UI in a browser with hot reload — the native bridge is a no-op there and all devices are simulated:
 
 ```bash

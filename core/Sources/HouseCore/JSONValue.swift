@@ -47,9 +47,10 @@ public enum JSONValue: Codable, Equatable, Sendable {
     public init?(any value: Any) {
         switch value {
         case is NSNull: self = .null
-        // A JSONSerialization boolean is an NSNumber too: tell them apart by its type.
+        // A JSONSerialization boolean is an NSNumber too: tell them apart by its type. And any
+        // NSNumber casts to Bool, so only a real Swift Bool is taken as one: a 1 stays a number.
         case let n as NSNumber where CFGetTypeID(n) == CFBooleanGetTypeID(): self = .bool(n.boolValue)
-        case let b as Bool: self = .bool(b)
+        case let b as Bool where type(of: value) == Bool.self: self = .bool(b)
         case let n as NSNumber: self = .number(n.doubleValue)
         case let s as String: self = .string(s)
         case let a as [Any]: self = .array(a.compactMap(JSONValue.init(any:)))

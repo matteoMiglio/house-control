@@ -21,6 +21,9 @@ What changed in each release of House Control. The Mac app is on
 - **Cameras only show from outside:** the cut-open rooms no longer show the ones hung on the house.
 - **The island says when everything is off:** a dimmed house and *Off*, instead of hiding behind the notch.
 - The island now shows the same controls as the panel for real air conditioners, and follows what the widgets change.
+- On the Mac the state of every lamp and AC is now kept by the app itself, not by the panel's web page: the panel,
+  the island, the widgets and AI Access all change one shared state, and what you set is kept in the app's data
+  folder (taken over once from where the panel kept it before).
 
 ### The view from outside, for planning security cameras
 

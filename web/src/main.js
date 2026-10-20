@@ -63,8 +63,9 @@ async function boot() {
 
   const store = createStore(config);
   const linked = [...config.lights, ...config.acs].some(isLinked);
-  // Never invent a starting state for real hardware: it reports its own.
-  if (!store.restored && !linked) {
+  // Never invent a starting state for real hardware: it reports its own. (In the Mac app
+  // the app decides, once it has heard from this page.)
+  if (!store.restored && !linked && !store.native) {
     // First launch: start with something worth looking at.
     const first = config.scenes.find((s) => s.id === 'cozy') || config.scenes[1] || config.scenes[0];
     if (first) store.applyScene(first.id);
@@ -123,6 +124,8 @@ async function boot() {
   incoming.applyRemote = (update) => store.applyRemote(update);
   incoming.adopt = (state) => store.adopt(state);
   incoming.share = () => store.share();
+  incoming.sync = (next) => store.sync(next);
+  incoming.deviceError = (id, message) => store.onDeviceError?.(id, message);
   // Widgets and controls: what they changed while the app was away is run here, where it
   // reaches the devices; a widget's tap on a lamp or a scene opens that in the panel.
   incoming.widget = (actions) => {
@@ -211,7 +214,7 @@ async function boot() {
   else if (store.lightCfg.has(opened)) panel.openSheet({ kind: 'light', id: opened });
 
   if (!isNative) show();
-  post('ready', { summary: store.summary() });
+  post('ready', { summary: store.summary(), legacy: store.legacy });
   if (isNative) publishWidgets(config, store);
   window.__house = { store, world, panel, config }; // handy in the dev console
 }

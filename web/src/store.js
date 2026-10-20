@@ -2,6 +2,10 @@ import { post, call, isNative } from './bridge.js';
 
 const STORAGE_KEY = 'house-control:state:v1';
 
+// In the Mac app the state lives in Swift (HomeStore in core/…/HomeStore.swift): this store
+// shows it, and passes on what the user does as intents. In a browser it is the real thing.
+const nativeState = isNative && Boolean(window.__HOUSE_BOOT__?.nativeState);
+
 export const AC_MODES = ['cool', 'heat', 'dry', 'fan', 'auto'];
 export const AC_FANS = ['auto', 'low', 'medium', 'high', 'turbo'];
 export const AC_SWINGS = ['swing', 'l1', 'l2', 'l3', 'l4', 'l5', 'off'];
@@ -30,20 +34,30 @@ export function createStore(config) {
   // What each real AC can do, as reported by the native side. A simulated AC can do everything.
   const features = {};
 
+  const take = (saved) => {
+    for (const [id, s] of Object.entries(saved.lights || {})) if (state.lights[id]) Object.assign(state.lights[id], s);
+    for (const [id, s] of Object.entries(saved.acs || {})) if (state.acs[id]) Object.assign(state.acs[id], s);
+    for (const [id, f] of Object.entries(saved.features || {})) if (state.acs[id]) features[id] = f;
+    state.scene = saved.scene || null;
+  };
   let restored = false;
+  // What this page saved before the app kept the state: handed over once, in `ready`.
+  let legacy = null;
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
     if (saved && saved.home === config.name) {
-      for (const [id, s] of Object.entries(saved.lights || {})) if (state.lights[id]) Object.assign(state.lights[id], s);
-      for (const [id, s] of Object.entries(saved.acs || {})) if (state.acs[id]) Object.assign(state.acs[id], s);
-      for (const [id, f] of Object.entries(saved.features || {})) if (state.acs[id]) features[id] = f;
-      state.scene = saved.scene || null;
-      restored = true;
+      if (nativeState) legacy = saved;
+      else { take(saved); restored = true; }
     }
   } catch { /* storage unavailable: start from defaults */ }
+  const booted = nativeState && window.__HOUSE_BOOT__?.state;
+  if (booted) { take(booted); restored = true; }
+  // The last intent sent to the app, and the last one its state took in (see sync).
+  let sent = 0;
 
   let saveTimer = 0;
   function persist() {
+    if (nativeState) return;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       try {
@@ -54,7 +68,7 @@ export function createStore(config) {
 
   function emit(change) {
     for (const fn of listeners) fn(change);
-    if (change.type !== 'tick') {
+    if (change.type !== 'tick' && !nativeState) {
       persist();
       post('summary', summary());
       // The native shell passes this on to its other views of the same home (the panel
@@ -78,6 +92,7 @@ export function createStore(config) {
   }
 
   function dispatch(kind, id, patch, before) {
+    if (nativeState) return; // the app sends it, once it has the intent
     const slot = outbox.get(id);
     if (slot) {
       slot.pending = { ...slot.pending, ...patch };
@@ -166,10 +181,18 @@ export function createStore(config) {
     };
   }
 
+  // Tells the app what the user did here. Always sent, even when nothing changed on this
+  // page: the app's answer to every intent is what lets this page take its state again.
+  function intent(op, fields) {
+    if (nativeState) post('intent', { op, ...fields, seq: ++sent, source: store.source ?? null });
+  }
+
   const store = {
     state,
     config,
     restored,
+    native: nativeState,
+    legacy,
     lightCfg,
     acCfg,
     summary,
@@ -187,6 +210,7 @@ export function createStore(config) {
 
     setLight(id, patch) {
       if (writeLight(id, patch)) { state.scene = null; emit({ type: 'light', id }); }
+      intent('setLight', { id, patch });
     },
     toggleLight(id) { store.setLight(id, { on: !state.lights[id].on }); },
 
@@ -194,10 +218,12 @@ export function createStore(config) {
       let any = false;
       for (const id of Object.keys(state.lights)) any = writeLight(id, { on }) || any;
       if (any) { state.scene = null; emit({ type: 'bulk' }); }
+      intent('setAllLights', { on });
     },
 
     setAC(id, patch) {
       if (writeAC(id, patch)) emit({ type: 'ac', id });
+      intent('setAC', { id, patch });
     },
 
     applyScene(sceneId) {
@@ -215,6 +241,7 @@ export function createStore(config) {
       }
       state.scene = sceneId;
       emit({ type: 'bulk', scene: sceneId });
+      intent('applyScene', { id: sceneId });
     },
 
     /** Reports the state again, for a view that has only just started. */
@@ -236,6 +263,24 @@ export function createStore(config) {
       if (any) emit({ type: 'bulk', remote: true, adopted: true, source: other.source || null });
     },
 
+    // The app's state (nativeState). `ack` is the last intent from this page it took in:
+    // while a newer one is on its way, this page is ahead and keeps what it shows; the
+    // answer to that intent brings everything.
+    sync({ state: next, ack = 0, tick = false, source = null }) {
+      if (ack < sent) return;
+      let any = false;
+      for (const [id, s] of Object.entries(next.lights || {})) any = writeLight(id, s, { remote: true }) || any;
+      for (const [id, s] of Object.entries(next.acs || {})) any = writeAC(id, s, { remote: true }) || any;
+      for (const [id, f] of Object.entries(next.features || {})) {
+        if (!state.acs[id] || JSON.stringify(features[id]) === JSON.stringify(f)) continue;
+        features[id] = f;
+        any = true;
+      }
+      const scene = next.scene ?? null;
+      if (scene !== state.scene) { state.scene = scene; any = true; }
+      if (any) emit(tick ? { type: 'tick' } : { type: 'bulk', remote: true, adopted: true, source });
+    },
+
     // State reported by real devices (native provider). Never echoed back as a command.
     applyRemote(update) {
       let any = false;
@@ -253,6 +298,7 @@ export function createStore(config) {
   // Without real sensors the room temperature is simulated: it drifts towards the
   // set-point while an AC runs and back towards the outdoor-ish ambient when it is off.
   setInterval(() => {
+    if (nativeState) return; // the app simulates it
     let any = false;
     for (const [id, a] of Object.entries(state.acs)) {
       const cfg = acCfg.get(id);

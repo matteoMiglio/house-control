@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationWillTerminate(_ notification: Notification) {
+        model.homeStore?.save()
         model.agent.stop(reason: "House Control quit")
     }
 
@@ -42,7 +43,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             signal(sig, SIG_IGN)
             let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
             source.setEventHandler { [weak self] in
-                MainActor.assumeIsolated { self?.model.agent.stop(reason: "House Control quit") }
+                MainActor.assumeIsolated {
+                    self?.model.homeStore?.save()
+                    self?.model.agent.stop(reason: "House Control quit")
+                }
                 exit(0)
             }
             source.resume()

@@ -93,6 +93,14 @@ final class AppModel: NSObject {
     @ObservationIgnored var phoneUserCode = ""
     /// Desktop widgets and Control Center controls: what they show, what they asked for.
     @ObservationIgnored let widgets = WidgetBridge()
+    /// Every lamp's and AC's state: the pages draw it and send it what the user does.
+    @ObservationIgnored var homeStore: HomeStore?
+    /// The plan the store was made for, to tell when it changes.
+    @ObservationIgnored var homePlanKey: Data?
+    @ObservationIgnored var homePlan: [String: Any]?
+    /// Each page's last intent the store took in (see `sync` in web/src/store.js).
+    @ObservationIgnored var intentAcks: [ObjectIdentifier: Int] = [:]
+    @ObservationIgnored var pendingPush: PendingPush?
 
     /// All entry points share one route; the AppKit controllers still own their windows.
     @ObservationIgnored private var storedRouter: WindowRouter?
@@ -137,11 +145,14 @@ final class AppModel: NSObject {
         }
         hub.onStale = { [weak self] in self?.poll() }
         widgets.onActions = { [weak self] run, adopt in
-            guard let self else { return }
-            if !run.isEmpty { self.hosts[.primary]?.call("widget", run) }
-            // What a widget changed by itself is adopted, and adopted state is not passed on:
-            // the island takes it directly.
-            if let adopt { for role in [HostRole.primary, .island] { self.hosts[role]?.call("adopt", adopt) } }
+            guard let store = self?.homeStore else { return }
+            for object in run {
+                guard let data = try? JSONSerialization.data(withJSONObject: object),
+                      let action = try? JSONDecoder().decode(HomeAction.self, from: data) else { continue }
+                store.run(action)
+            }
+            // What a widget changed by itself is shown, and not sent to the device again.
+            if let adopt { store.adoptDelivered(adopt) }
         }
         reloadLinks()
         host.load()
@@ -317,12 +328,14 @@ final class AppModel: NSObject {
         boot["agentLive"] = agent.isLive
         loginState = LoginItem.state
         boot["openAtLogin"] = loginState.rawValue
+        stateBoot(&boot)
         // HOUSE_OPEN_DEVICE=<id> starts the panel on that light's or AC's detail sheet.
         if let device = ProcessInfo.processInfo.environment["HOUSE_OPEN_DEVICE"] { boot["openDevice"] = device }
         return boot
     }
 
     func reloadLinks() {
+        loadHomeStore()
         hub.setLinks(from: plans.activePlan == "custom" ? plans.customPlan() : nil)
         homeName = plans.activePlan == "custom" ? (plans.customPlanName ?? "My home") : "Demo home"
     }
@@ -441,7 +454,7 @@ final class AppModel: NSObject {
     private func poll() {
         Task { @MainActor in
             guard let update = await hub.poll() else { return }
-            hosts[.primary]?.call("applyRemote", update) // the island adopts it from the panel
+            homeStore?.applyRemote(update)
         }
     }
 
@@ -458,6 +471,7 @@ final class AppModel: NSObject {
             let host = WebHost(mode: "island", transparent: true) { [unowned self] in
                 var boot = self.plans.bootPayload()
                 boot["island"] = self.island?.bootInfo ?? [:]
+                self.stateBoot(&boot)
                 return boot
             }
             host.onMessage = { [weak self, unowned host] message in self?.handle(message, from: host) }
