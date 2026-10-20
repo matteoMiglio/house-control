@@ -19,7 +19,8 @@ What changed in each release of House Control. The Mac app is on
   Space held to move around it (never so far that the home slides out of sight), ⌘+ / ⌘− / ⌘0 and buttons in its
   corner.
 - **Cameras only show from outside:** the cut-open rooms no longer show the ones hung on the house.
-- **The island says when everything is off:** a dimmed house and *Off*, instead of hiding behind the notch.
+- **The island says when everything is off:** a dimmed house and *Off*, instead of hiding behind the notch. On a
+  display without a notch it still steps out of the menu bar then, rather than cover the menu bar items.
 - The island now shows the same controls as the panel for real air conditioners, and follows what the widgets change.
 - On the Mac the state of every lamp and AC is now kept by the app itself, not by the panel's web page: the panel,
   the island, the widgets and AI Access all change one shared state, and what you set is kept in the app's data

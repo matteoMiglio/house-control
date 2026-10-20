@@ -212,11 +212,14 @@ export async function bootIsland(root) {
     const m = css(mood());
     isle.style.setProperty('--mood', m);
     isle.classList.toggle('quiet', onCount === 0 && !acOn);
+    // Around a real notch the tab fills room that is dead anyway; drawn in the middle of a
+    // menu bar without one, it would only cover menu bar items while it has nothing to say.
+    isle.classList.toggle('gone', onCount === 0 && !acOn && !notch.real);
 
     if (isle.dataset.state === 'peek' && peek) {
       earLeft.replaceChildren(...peek.left);
       earRight.replaceChildren(h('span.ear-text.strong', peek.right));
-    } else if (!onCount && !acOn) {
+    } else if (!onCount && !acOn && notch.real) {
       // Everything off: the tab still shows the home, dimmed, and says so.
       earLeft.replaceChildren(...plainEar('home', null, '#8b93a7'));
       earRight.replaceChildren(h('span.ear-text.off', 'Off'));
