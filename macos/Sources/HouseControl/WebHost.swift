@@ -108,7 +108,11 @@ final class WebHost: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 
     /// Calls `window.house.<function>(…args)` in the page.
     func call(_ function: String, _ args: Any...) {
-        webView.evaluateJavaScript(WebJSON.call(function, args), completionHandler: nil)
+        call(function, arguments: args)
+    }
+
+    func call(_ function: String, arguments: [Any]) {
+        webView.evaluateJavaScript(WebJSON.call(function, arguments), completionHandler: nil)
     }
 
     func reply(to message: [String: Any], _ result: Any) {

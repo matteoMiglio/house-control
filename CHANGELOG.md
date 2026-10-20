@@ -23,6 +23,9 @@ What changed in each release of House Control. The Mac app is on
 - **The island says when everything is off:** a dimmed house and *Off*, instead of hiding behind the notch. On a
   display without a notch it still steps out of the menu bar then, rather than cover the menu bar items.
 - The island now shows the same controls as the panel for real air conditioners, and follows what the widgets change.
+- **On the Mac the controls are native:** the header, scenes, rooms, device tiles, the lamp, AC and camera sheets
+  and the notices are SwiftUI now, drawn over the 3D model as before and looking the same. The model, its tooltip
+  and the floor plan editor stay web pages; the iPhone keeps its web controls for now.
 - On the Mac the state of every lamp and AC is now kept by the app itself, not by the panel's web page: the panel,
   the island, the widgets and AI Access all change one shared state, and what you set is kept in the app's data
   folder (taken over once from where the panel kept it before).

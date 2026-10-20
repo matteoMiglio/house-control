@@ -1,0 +1,224 @@
+{
+  "name": "Home",
+  "groups": [
+    {
+      "id": "living",
+      "name": "Living",
+      "outside": false
+    },
+    {
+      "id": "dining",
+      "name": "Dining",
+      "outside": false
+    },
+    {
+      "id": "kitchen",
+      "name": "Kitchen",
+      "outside": false
+    },
+    {
+      "id": "bedroom",
+      "name": "Bedroom",
+      "outside": false
+    },
+    {
+      "id": "bath",
+      "name": "Bathroom",
+      "outside": false
+    },
+    {
+      "id": "outside",
+      "name": "Outside",
+      "outside": true
+    }
+  ],
+  "lights": [
+    {
+      "id": "living.main",
+      "name": "Ceiling",
+      "room": "living",
+      "type": "ceiling",
+      "capabilities": [
+        "brightness",
+        "temp"
+      ],
+      "icon": "ceiling"
+    },
+    {
+      "id": "living.floor",
+      "name": "Floor lamp",
+      "room": "living",
+      "type": "floor",
+      "capabilities": [],
+      "icon": "plug"
+    },
+    {
+      "id": "living.tv",
+      "name": "TV backlight",
+      "room": "living",
+      "type": "strip",
+      "capabilities": [
+        "brightness",
+        "color"
+      ],
+      "icon": "strip"
+    },
+    {
+      "id": "dining.pendant",
+      "name": "Pendant",
+      "room": "dining",
+      "type": "pendant",
+      "capabilities": [
+        "brightness",
+        "temp"
+      ],
+      "icon": "pendant"
+    },
+    {
+      "id": "kitchen.spots",
+      "name": "Spots",
+      "room": "kitchen",
+      "type": "spots",
+      "capabilities": [
+        "brightness"
+      ],
+      "icon": "spots"
+    },
+    {
+      "id": "kitchen.strip",
+      "name": "Counter light",
+      "room": "kitchen",
+      "type": "strip",
+      "capabilities": [
+        "brightness",
+        "temp"
+      ],
+      "icon": "strip"
+    },
+    {
+      "id": "bedroom.main",
+      "name": "Ceiling",
+      "room": "bedroom",
+      "type": "ceiling",
+      "capabilities": [
+        "brightness",
+        "temp"
+      ],
+      "icon": "ceiling"
+    },
+    {
+      "id": "bedroom.left",
+      "name": "Bedside left",
+      "room": "bedroom",
+      "type": "table",
+      "capabilities": [],
+      "icon": "plug"
+    },
+    {
+      "id": "bedroom.right",
+      "name": "Bedside right",
+      "room": "bedroom",
+      "type": "table",
+      "capabilities": [],
+      "icon": "plug"
+    },
+    {
+      "id": "bath.main",
+      "name": "Ceiling",
+      "room": "bath",
+      "type": "ceiling",
+      "capabilities": [
+        "brightness"
+      ],
+      "icon": "ceiling"
+    },
+    {
+      "id": "bath.mirror",
+      "name": "Mirror light",
+      "room": "bath",
+      "type": "strip",
+      "capabilities": [
+        "brightness",
+        "temp"
+      ],
+      "icon": "strip"
+    },
+    {
+      "id": "outside.door",
+      "name": "Door lantern",
+      "room": "outside",
+      "type": "lantern",
+      "capabilities": [
+        "brightness"
+      ],
+      "icon": "lantern"
+    },
+    {
+      "id": "outside.post1",
+      "name": "Terrace post",
+      "room": "outside",
+      "type": "post",
+      "capabilities": [],
+      "icon": "post"
+    },
+    {
+      "id": "outside.post2",
+      "name": "Garden post",
+      "room": "outside",
+      "type": "post",
+      "capabilities": [],
+      "icon": "post"
+    },
+    {
+      "id": "outside.flood",
+      "name": "Back floodlight",
+      "room": "outside",
+      "type": "flood",
+      "capabilities": [],
+      "icon": "flood"
+    }
+  ],
+  "acs": [
+    {
+      "id": "living.ac",
+      "name": "Living AC",
+      "room": "living",
+      "min": 16,
+      "max": 30
+    },
+    {
+      "id": "bedroom.ac",
+      "name": "Bedroom AC",
+      "room": "bedroom",
+      "min": 16,
+      "max": 30
+    }
+  ],
+  "scenes": [
+    {
+      "id": "bright",
+      "name": "Bright",
+      "icon": "sun"
+    },
+    {
+      "id": "cozy",
+      "name": "Cozy",
+      "icon": "sofa"
+    },
+    {
+      "id": "movie",
+      "name": "Movie",
+      "icon": "film"
+    },
+    {
+      "id": "night",
+      "name": "Night",
+      "icon": "moon"
+    },
+    {
+      "id": "away",
+      "name": "Away",
+      "icon": "door"
+    }
+  ]
+}

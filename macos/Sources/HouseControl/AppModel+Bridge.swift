@@ -14,12 +14,21 @@ extension AppModel {
             // The editor's page catches up with a screen asked for while it was loading.
             if host === hosts[.editor] { showEditorWant() }
             if host === hosts[.primary] {
+                // A page that could not start shows why; the native controls step aside.
+                home.pageError = message["error"] as? String
+                // A reloaded page starts from scratch: show it what the controls show.
+                home.resendView()
+                openDeviceOnLaunch()
                 widgets.isReady = true
                 router.markReady()
                 primaryLoaded()
             }
         case "intent":
             receiveIntent(message, from: host)
+        case "pick":
+            home.picked(message)
+        case "toast":
+            home.showToast(message["text"] as? String ?? "", ai: message["ai"] as? String)
         case "widgets":
             if host === hosts[.primary] { widgets.publish(message) }
         case "close":

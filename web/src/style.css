@@ -190,6 +190,10 @@ html[data-chrome='window'] .notch { display: none; }
 .tooltip.on .dot { background: var(--dot, var(--warm)); box-shadow: 0 0 10px var(--dot, var(--warm)); }
 .tooltip span { color: var(--muted); font-weight: 500; }
 
+/* The Mac app draws the header, the device list, the sheets and the toasts natively over the page. */
+html.native-controls .top, html.native-controls .panel, html.native-controls .sheet, html.native-controls .panel-toast,
+html.native-controls .stage-btn { display: none !important; }
+
 /* ---------- header ---------- */
 
 .top {

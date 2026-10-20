@@ -1,5 +1,6 @@
 import { loadRawConfig, normalize, isLinked } from './config.js';
 import { createStore } from './store.js';
+import { LEVELS, levelDistances } from './coverage.js';
 import { createWorld } from './three/world.js';
 import { createPanel } from './ui/panel.js';
 import { createAgent } from './agent/tools.js';
@@ -26,6 +27,9 @@ const isWide = () => document.documentElement.dataset.chrome === 'window' && mat
 
 const app = document.getElementById('app');
 if (isNative) document.documentElement.classList.add('native');
+// The Mac app draws the controls natively over the page: here only the card and the 3D model.
+const nativeControls = isNative && Boolean(window.__HOUSE_BOOT__?.nativeControls);
+if (nativeControls) document.documentElement.classList.add('native-controls');
 if (isPhone) document.documentElement.classList.add('ios');
 
 // ?safeTop=62&safeBottom=34 stands in for a phone's safe areas when its layout is looked at in a browser.
@@ -88,7 +92,8 @@ async function boot() {
       onHover: panel.showTooltip,
       onPick(target) {
         if (!target) return;
-        if (target.kind === 'light') { haptic('light'); store.toggleLight(target.id); }
+        if (target.kind === 'light') { haptic('light'); store.toggleLight(target.id); return; }
+        if (nativeControls) { post('pick', pickMessage(target)); return; }
         else if (target.kind === 'ac' || target.kind === 'camera') panel.openSheet(target);
         else if (target.kind === 'room') panel.selectRoom(target.id);
       },
@@ -110,7 +115,24 @@ async function boot() {
   const show = () => { world.setRunning(true); world.intro(); };
   const hide = () => { world.setRunning(false); };
   incoming.shown = show;
-  incoming.hidden = () => { hide(); panel.closeSheet(); if (panel.room !== 'all') panel.selectRoom('all'); };
+  // Hidden, the panel starts over next time (the native controls do that themselves).
+  incoming.hidden = () => { hide(); if (nativeControls) return; panel.closeSheet(); if (panel.room !== 'all') panel.selectRoom('all'); };
+  // What the native controls show in the 3D view.
+  incoming.focus = (target) => { panel.hideTooltip(); panel.setFocus(target); world.focus(target); };
+  incoming.setOutside = (on) => world.setOutside(on);
+  incoming.setCoverageShown = (on) => world.setCoverageShown(on);
+  incoming.bump = (id) => world.lights.get(id)?.bump();
+  // A camera's sheet shows how far it makes out each level of detail.
+  const pickMessage = (target) => {
+    if (target.kind !== 'camera') return { kind: target.kind, id: target.id };
+    const cam = config.cameras.find((c) => c.id === target.id);
+    const reach = levelDistances(cam);
+    return {
+      kind: 'camera', id: cam.id,
+      camera: { name: cam.name, fov: cam.fov, y: cam.y, tilt: cam.tilt, range: cam.range,
+        levels: LEVELS.map((l, i) => ({ name: l.name, color: l.color, reach: reach[i] })) },
+    };
+  };
   incoming.setNotch = (x) => panel.setNotch(x);
   if (isPhone) {
     // Swiping in from the left edge goes back from a device sheet, as it does everywhere on iOS.
@@ -139,6 +161,7 @@ async function boot() {
     }
   };
   incoming.openDevice = (id) => {
+    if (nativeControls) return;
     if (store.acCfg.has(id)) panel.openSheet({ kind: 'ac', id });
     else if (store.lightCfg.has(id)) panel.openSheet({ kind: 'light', id });
     else if (config.rooms.some((r) => r.id === id)) { panel.closeSheet(); panel.selectRoom(id); }
@@ -147,7 +170,11 @@ async function boot() {
   const agent = createAgent({
     store, config, raw,
     render: (room) => renderShot(config, store, room),
-    onAction: ({ client, summary }) => { if (summary) panel.toast(summary, client || 'AI'); },
+    onAction: ({ client, summary }) => {
+      if (!summary) return;
+      if (nativeControls) post('toast', { text: summary, ai: client || 'AI' });
+      else panel.toast(summary, client || 'AI');
+    },
   });
   incoming.agent = async (request) => {
     store.source = request.client || 'AI'; // the other views say who made the change
@@ -211,7 +238,7 @@ async function boot() {
     openMenu(panel.anchorMenu, anchor, items);
   }
 
-  const opened = window.__HOUSE_BOOT__?.openDevice || new URLSearchParams(location.search).get('device');
+  const opened = !nativeControls && (window.__HOUSE_BOOT__?.openDevice || new URLSearchParams(location.search).get('device'));
   if (store.acCfg.has(opened)) panel.openSheet({ kind: 'ac', id: opened });
   else if (store.lightCfg.has(opened)) panel.openSheet({ kind: 'light', id: opened });
 

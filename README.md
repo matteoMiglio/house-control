@@ -378,7 +378,10 @@ cd core && swift test
 ```
 
 With only the Command Line Tools installed (no Xcode, so no XCTest), `HOUSE_NO_XCTEST=1 swift test` runs the Swift
-Testing suites alone.
+Testing suites alone (from a clean build folder: incremental builds there cannot find the testing macros).
+
+`scripts/lucide-icons.mjs` regenerates the icons the native Mac controls draw (the web UI's own Lucide set), and
+`scripts/config-fixtures.mjs` the fixtures that test the Swift reading of a plan against `web/src/config.js`.
 
 Work on the UI in a browser with hot reload — the native bridge is a no-op there and all devices are simulated:
 

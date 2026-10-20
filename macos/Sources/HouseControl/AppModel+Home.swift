@@ -56,6 +56,7 @@ extension AppModel {
             primaryPlace = .home
         } else if primaryPlace == .home {
             host.call("hidden")
+            home.reset()
             primaryPlace = .none
         }
         setPolling(false)

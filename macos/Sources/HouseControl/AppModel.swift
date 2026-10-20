@@ -51,6 +51,7 @@ final class AppModel: NSObject {
         agent.onLiveChange = { [weak self] live in
             guard let self else { return }
             self.agentLive = live
+            self.home.agentLive = live
             self.hosts[.primary]?.call("agentLive", live)
             self.refreshStatusIcon()
         }
@@ -95,6 +96,13 @@ final class AppModel: NSObject {
     @ObservationIgnored let widgets = WidgetBridge()
     /// Every lamp's and AC's state: the pages draw it and send it what the user does.
     @ObservationIgnored var homeStore: HomeStore?
+    /// The native controls over the 3D page, in the panel and in the window.
+    @ObservationIgnored let home = HomeModel()
+    /// Where the panel shows the page.
+    @ObservationIgnored weak var panelSlot: WebSlotView?
+    @ObservationIgnored var keyMonitor: Any?
+    @ObservationIgnored var menuMonitor: Any?
+    @ObservationIgnored var openedLaunchDevice = false
     /// The plan the store was made for, to tell when it changes.
     @ObservationIgnored var homePlanKey: Data?
     @ObservationIgnored var homePlan: [String: Any]?
@@ -132,17 +140,31 @@ final class AppModel: NSObject {
             button.toolTip = "House Control"
         }
 
-        let host = WebHost(mode: "panel", transparent: true) { [unowned self] in self.bootPayload() }
+        let host = WebHost(mode: "panel", transparent: true) { [unowned self] in
+            var boot = self.bootPayload()
+            boot["nativeControls"] = true // the controls are drawn natively over this page
+            return boot
+        }
         host.onMessage = { [weak self, unowned host] message in self?.handle(message, from: host) }
         hosts[.primary] = host
-        panel = PanelController(host: host)
+        let surface = NSHostingView(rootView: HomeSurface(model: home, chrome: .menubar) { [weak self] slot, present in
+            if present { self?.panelSlot = slot }
+        })
+        panel = PanelController(host: host, surface: surface)
+        panel.takePage = { [weak self, unowned host] in
+            surface.layoutSubtreeIfNeeded() // the slot reports itself once it is laid out
+            self?.panelSlot?.lend(host.webView)
+        }
         panel.onVisibilityChange = { [weak self] visible in self?.setPolling(visible) }
         // Going back to the main window, the page is not hidden: it keeps its room and sheet.
         panel.keepsPageLive = { [weak self] in self?.homeSlot != nil && self?.mainShown == true }
         panel.onHidden = { [weak self] in
-            self?.primaryPlace = .none
-            self?.placePrimary()
+            guard let self else { return }
+            if self.panel.keepsPageLive?() != true { self.home.reset() }
+            self.primaryPlace = .none
+            self.placePrimary()
         }
+        startHomeControls()
         hub.onStale = { [weak self] in self?.poll() }
         widgets.onActions = { [weak self] run, adopt in
             guard let store = self?.homeStore else { return }
@@ -208,7 +230,7 @@ final class AppModel: NSObject {
         router.whenReady { [weak self] in
             guard let self else { return }
             if !self.panel.isVisible { self.router.show(.panel) }
-            if let device { self.hosts[.primary]?.call("openDevice", device) }
+            if let device { self.home.open(device: device) }
         }
     }
 

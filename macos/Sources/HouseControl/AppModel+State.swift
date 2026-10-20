@@ -24,9 +24,10 @@ extension AppModel {
                                   self.hub.command(message, reply: reply)
                               })
         store.onChange = { [weak self] change in self?.schedulePush(change) }
-        store.onDeviceError = { [weak self] id, message in self?.hosts[.primary]?.call("deviceError", id, message) }
+        store.onDeviceError = { [weak self] id, message in self?.home.deviceError(id, message) }
         store.startSimulation()
         homeStore = store
+        home.load(plan: plan ?? [:], store: store)
         updateStatus(store.summary)
     }
 
@@ -87,6 +88,7 @@ extension AppModel {
             host.call("sync", ["state": state, "ack": intentAcks[ObjectIdentifier(host)] ?? 0,
                                "tick": push.tick, "source": (push.source as Any?) ?? NSNull()])
         }
+        home.refresh()
         if !push.tick { updateStatus(homeStore.summary) }
     }
 }

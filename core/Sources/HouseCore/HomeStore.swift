@@ -17,8 +17,8 @@ public final class HomeStore {
         public var tick = false
     }
 
-    public static let acModes = ["cool", "heat", "dry", "fan", "auto"]
-    public static let acFans = ["auto", "low", "medium", "high", "turbo"]
+    nonisolated public static let acModes = ["cool", "heat", "dry", "fan", "auto"]
+    nonisolated public static let acFans = ["auto", "low", "medium", "high", "turbo"]
 
     public private(set) var lights: [String: [String: JSONValue]] = [:]
     public private(set) var acs: [String: [String: JSONValue]] = [:]

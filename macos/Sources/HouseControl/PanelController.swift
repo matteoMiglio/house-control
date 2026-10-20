@@ -7,7 +7,8 @@ private final class FloatingPanel: NSPanel {
 }
 
 /// The borderless popover under the menu bar icon. The web content draws the card
-/// (rounded corners, notch, shadow) itself on a fully transparent window.
+/// (rounded corners, notch, shadow) itself on a fully transparent window; the native controls
+/// lie over it (`surface`, a `HomeSurface` with a slot for the page).
 ///
 /// The page is shared with the main window: the panel takes it back each time it opens, and
 /// gives it up (see `onHidden`) once it has faded out.
@@ -31,8 +32,12 @@ final class PanelController: NSObject, NSWindowDelegate {
     var keepsPageLive: (() -> Bool)?
     /// Keeps the panel open when it loses focus (HOUSE_PIN=1, for UI automation and screenshots).
     private let pinned = ProcessInfo.processInfo.environment["HOUSE_PIN"] != nil
+    /// Puts the page in the panel's slot (it may have been lent to the main window).
+    var takePage: (() -> Void)?
+    /// The panel's window, to tell its key presses from the main window's.
+    var nsWindow: NSWindow { window }
 
-    init(host: WebHost) {
+    init(host: WebHost, surface: NSView) {
         self.host = host
         let size = NSSize(width: Self.card.width + Self.padSide * 2, height: Self.card.height + Self.padTop + Self.padBottom)
         window = FloatingPanel(contentRect: NSRect(origin: .zero, size: size),
@@ -48,7 +53,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         window.hidesOnDeactivate = false
         window.animationBehavior = .none
         window.delegate = self
-        window.contentView = host.webView
+        window.contentView = surface
         window.alphaValue = 0
     }
 
@@ -74,10 +79,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         window.setFrame(NSRect(x: x.rounded(), y: y.rounded(), width: size.width, height: size.height), display: true)
 
         // The page may have been lent to the main window since the panel last showed it.
-        if window.contentView !== host.webView {
-            host.webView.removeFromSuperview()
-            window.contentView = host.webView
-        }
+        takePage?()
         host.call("setChrome", "menubar")
         host.call("setNotch", Double(anchor.midX - x - Self.padSide))
         host.call("shown")

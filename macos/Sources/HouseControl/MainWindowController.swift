@@ -8,7 +8,7 @@ import WebKit
 /// directly, and so that it never reopens by itself when the Mac starts the app at login.
 @MainActor
 final class MainWindowController: NSObject, NSWindowDelegate {
-    private let window: NSWindow
+    private(set) var window: NSWindow
     /// The window came on screen (true) or left it: closed or minimised (false).
     var onVisibilityChange: ((Bool) -> Void)?
     /// The window opened (true) or closed (false); minimised it is still open.

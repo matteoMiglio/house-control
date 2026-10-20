@@ -9,7 +9,8 @@ import {
   List, Trash2, Scan, Redo2, Map as MapIcon, DoorClosed, Armchair, Cctv, Trees, Fence, LampWallDown, Spotlight,
 } from 'lucide';
 
-const ICONS = {
+/** The icons by the names the UI uses (the native Mac panel draws the same ones: scripts/lucide-icons.mjs). */
+export const ICONS = {
   power: Power, sun: Sun, sofa: Sofa, film: Film, moon: Moon, door: DoorOpen,
   ceiling: LampCeiling, pendant: Lamp, spots: Lightbulb, floor: LampFloor, table: LampDesk, strip: Sparkles,
   cool: Snowflake, heat: Flame, dry: Droplets, fan: Fan, auto: RefreshCw, wind: Wind, leaf: Leaf,

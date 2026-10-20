@@ -1,0 +1,109 @@
+{
+  "name": "Studio",
+  "groups": [
+    {
+      "id": "main",
+      "name": "Studio",
+      "outside": false
+    },
+    {
+      "id": "bath",
+      "name": "Bathroom",
+      "outside": false
+    },
+    {
+      "id": "hall",
+      "name": "Hall",
+      "outside": false
+    }
+  ],
+  "lights": [
+    {
+      "id": "main.ceiling",
+      "name": "Ceiling",
+      "room": "main",
+      "type": "pendant",
+      "capabilities": [
+        "brightness",
+        "temp"
+      ],
+      "icon": "pendant"
+    },
+    {
+      "id": "main.bed",
+      "name": "Bedside",
+      "room": "main",
+      "type": "table",
+      "capabilities": [],
+      "icon": "plug"
+    },
+    {
+      "id": "main.desk",
+      "name": "Desk lamp",
+      "room": "main",
+      "type": "table",
+      "capabilities": [],
+      "icon": "plug"
+    },
+    {
+      "id": "main.shelf",
+      "name": "Shelf glow",
+      "room": "main",
+      "type": "strip",
+      "capabilities": [
+        "brightness",
+        "color"
+      ],
+      "icon": "strip"
+    },
+    {
+      "id": "bath.ceiling",
+      "name": "Ceiling",
+      "room": "bath",
+      "type": "ceiling",
+      "capabilities": [
+        "brightness"
+      ],
+      "icon": "ceiling"
+    },
+    {
+      "id": "hall.ceiling",
+      "name": "Ceiling",
+      "room": "hall",
+      "type": "spots",
+      "capabilities": [],
+      "icon": "plug"
+    }
+  ],
+  "acs": [
+    {
+      "id": "main.ac",
+      "name": "Studio AC",
+      "room": "main",
+      "min": 16,
+      "max": 30
+    }
+  ],
+  "scenes": [
+    {
+      "id": "bright",
+      "name": "Bright",
+      "icon": "sun"
+    },
+    {
+      "id": "work",
+      "name": "Work",
+      "icon": "table"
+    },
+    {
+      "id": "chill",
+      "name": "Chill",
+      "icon": "sofa"
+    },
+    {
+      "id": "off",
+      "name": "All off",
+      "icon": "moon"
+    }
+  ]
+}

@@ -36,6 +36,8 @@ function acTemperatureColor(target, cfg) {
 export function createPanel(root, config, store, { onFocus, onMenu }) {
   const { state } = store;
   const ui = { room: 'all', sheet: null };
+  // With native controls, what the app shows in the 3D view (an open AC sheet tints the card).
+  let focus = null;
   let world = null;
   // Devices are listed by room, and the outside as one more group (config.groups).
   const roomName = new Map(config.groups.map((r) => [r.id, r.name]));
@@ -544,10 +546,11 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
   /* ---------- derived state ---------- */
 
   function mood() {
-    if (ui.sheet?.kind === 'ac') {
-      const a = state.acs[ui.sheet.id];
+    const ac = ui.sheet?.kind === 'ac' ? ui.sheet : focus?.kind === 'ac' ? focus : null;
+    if (ac) {
+      const a = state.acs[ac.id];
       if (!a.on) return NAVY.clone().multiplyScalar(0.8);
-      if (a.mode === 'cool' || a.mode === 'heat' || a.mode === 'auto') return acTemperatureColor(a.target, store.acCfg.get(ui.sheet.id));
+      if (a.mode === 'cool' || a.mode === 'heat' || a.mode === 'auto') return acTemperatureColor(a.target, store.acCfg.get(ac.id));
       return new THREE.Color(MODE_COLORS[a.mode]).multiplyScalar(0.38);
     }
     const sum = new THREE.Color(0, 0, 0);
@@ -597,8 +600,9 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
   }
 
   store.on(() => update());
+  // With native controls the app handles Escape (closing its sheet, or the panel).
   window.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape' && !closeSheet()) onMenu(null, 'escape');
+    if (ev.key === 'Escape' && !document.documentElement.classList.contains('native-controls') && !closeSheet()) onMenu(null, 'escape');
   });
 
   layoutTiles();
@@ -609,6 +613,9 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     card,
     attach(w) { world = w; card.classList.remove('booting'); showView(w.outside); },
     showTooltip,
+    hideTooltip,
+    /** What the native controls focus the 3D view on: an AC's sheet tints the card like this panel's does. */
+    setFocus(target) { focus = target; update(); },
     openSheet,
     closeSheet,
     selectRoom,
