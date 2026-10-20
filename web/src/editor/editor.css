@@ -6,13 +6,20 @@ html.mode-editor, html.mode-editor body { user-select: none; }
   height: 100%;
   display: grid;
   grid-template-columns: 268px minmax(0, 1fr) 340px;
-  grid-template-rows: 54px minmax(0, 1fr) 34px;
+  grid-template-rows: calc(54px + var(--title-bar)) minmax(0, 1fr) 34px;
   grid-template-areas: 'bar bar bar' 'side canvas right' 'foot foot foot';
+  --title-bar: 0px;
   background:
     radial-gradient(70% 50% at 50% 0%, rgba(36, 60, 120, 0.35), transparent 70%),
     var(--bg);
   font-size: 13px;
 }
+
+/* In the Mac app's window the page runs up under the title bar: the top bar grows so its contents
+   sit level with the sidebar's first row and the home's header (centred 43 pt down), just clear of
+   the title bar's 28 pt. */
+html.native:not(.ios) .editor { --title-bar: 16px; }
+html.native:not(.ios) .bar { padding-top: var(--title-bar); }
 
 .bar {
   grid-area: bar;

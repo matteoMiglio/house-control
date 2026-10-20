@@ -66,8 +66,11 @@ private struct EditorView: View {
     let showing: MainSection
 
     var body: some View {
+        // Up under the title bar too: the editor's top bar grows by as much (editor.css), so its
+        // colour fills it while its buttons stay below it.
         WebSlot { slot, present in model.editorSlot(slot, present: present, showing: showing) }
             .id(showing) // a slot of its own for each, so moving between them lends the page again
+            .ignoresSafeArea(.container, edges: .top)
             .navigationTitle(showing == .connections ? "Connections" : "Edit Home")
     }
 }
