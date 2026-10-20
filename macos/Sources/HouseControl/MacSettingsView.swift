@@ -22,9 +22,9 @@ struct MacSettingsView: View {
                                 .labelsHidden()
                         }
                         Divider().overlay(Theme.line).padding(.leading, 68).padding(.trailing, 18)
-                        SettingsRow(symbol: "macbook", title: "Show the island around the notch",
-                                    detail: "Keep your home's controls at the top of the screen.") {
-                            Toggle("Show the island around the notch", isOn: Binding(get: { model.islandShown }, set: { model.setIsland($0) }))
+                        SettingsRow(symbol: "macbook", title: "Use the island instead of the menu bar icon",
+                                    detail: "Your home's controls hang from the notch, with the app's menu behind their gear. Turn this off to get the menu bar icon back.") {
+                            Toggle("Use the island instead of the menu bar icon", isOn: Binding(get: { model.islandShown }, set: { model.setIsland($0) }))
                                 .labelsHidden()
                         }
                     }

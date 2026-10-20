@@ -103,6 +103,7 @@ final class AppModel: NSObject {
     @ObservationIgnored var keyMonitor: Any?
     @ObservationIgnored var menuMonitor: Any?
     @ObservationIgnored var openedLaunchDevice = false
+    @ObservationIgnored var islandModel: IslandModel?
     /// The plan the store was made for, to tell when it changes.
     @ObservationIgnored var homePlanKey: Data?
     @ObservationIgnored var homePlan: [String: Any]?
@@ -118,7 +119,9 @@ final class AppModel: NSObject {
             guard let self else { return }
             switch destination {
             case .home: self.showMainWindow(.home)
-            case .panel: if !self.panel.isVisible { self.togglePanel() }
+            // Without the menu bar icon (the island is used instead) there is no panel: the window.
+            case .panel:
+                if !self.statusItem.isVisible { self.showMainWindow(.home) } else if !self.panel.isVisible { self.togglePanel() }
             case .editor(let section): self.openEditor(section: section)
             case .agent: self.showMainWindow(.agent)
             case .pairing: self.showMainWindow(.pairing)
@@ -190,7 +193,7 @@ final class AppModel: NSObject {
             let delay = Double(ProcessInfo.processInfo.environment["HOUSE_SNAPSHOT_DELAY"] ?? "") ?? 6
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.hosts[.primary]?.snapshot(to: directory.appendingPathComponent("panel.png"))
-                self?.hosts[.island]?.snapshot(to: directory.appendingPathComponent("island.png"))
+                self?.island?.snapshot(to: directory.appendingPathComponent("island.png"))
                 self?.mainWindow?.snapshot(to: directory.appendingPathComponent("main.png"), page: self?.homeSlot)
             }
         }
@@ -281,46 +284,57 @@ final class AppModel: NSObject {
     @objc private func statusItemClicked() {
         if NSApp.currentEvent?.type == .rightMouseUp {
             dismissPanel()
-            let menu = NSMenu()
-            menu.addItem(withTitle: "Open House Control", action: #selector(requestHome), keyEquivalent: "").target = self
-            menu.addItem(.separator())
-            menu.addItem(withTitle: "Edit Home…", action: #selector(requestEditor), keyEquivalent: "").target = self
-            menu.addItem(withTitle: "Load Floor Plan…", action: #selector(loadPlan), keyEquivalent: "").target = self
-            menu.addItem(withTitle: "Reveal Plan File", action: #selector(revealPlan), keyEquivalent: "").target = self
-            menu.addItem(withTitle: "Reveal Device Log", action: #selector(revealLog), keyEquivalent: "").target = self
-            menu.addItem(.separator())
-            let islandItem = menu.addItem(withTitle: "Show Island", action: #selector(toggleIsland), keyEquivalent: "")
-            islandItem.target = self
-            islandItem.state = island?.isShown == true ? .on : .off
-            loginState = LoginItem.state
-            let login = loginState
-            let loginItem = menu.addItem(withTitle: login == .needsApproval ? "Open at Login — Allow in Settings…" : "Open at Login",
-                                         action: #selector(toggleOpenAtLogin), keyEquivalent: "")
-            loginItem.target = self
-            loginItem.state = login == .on ? .on : login == .needsApproval ? .mixed : .off
-            menu.addItem(withTitle: "Pair iPhone…", action: #selector(requestPairing), keyEquivalent: "").target = self
-            let aiItem = menu.addItem(withTitle: agent.isLive ? "AI Access — Live" : "AI Access…", action: #selector(requestAgent), keyEquivalent: "")
-            aiItem.target = self
-            aiItem.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)
-            if agent.isLive {
-                menu.addItem(withTitle: "Stop AI Access", action: #selector(stopAgent), keyEquivalent: "").target = self
-            }
-            connectedDevices = sync.connectedDevices
-            for device in connectedDevices {
-                let item = menu.addItem(withTitle: "\(device) is connected", action: nil, keyEquivalent: "")
-                item.image = NSImage(systemSymbolName: "iphone", accessibilityDescription: nil)
-            }
-            menu.addItem(.separator())
-            menu.addItem(aboutMenuItem())
-            menu.addItem(withTitle: "Settings…", action: #selector(requestSettings), keyEquivalent: ",").target = self
-            menu.addItem(withTitle: "Reload", action: #selector(reloadAll), keyEquivalent: "").target = self
-            menu.addItem(withTitle: "Quit House Control", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-            statusItem.menu = menu
+            statusItem.menu = appMenu()
             statusItem.button?.performClick(nil)
             statusItem.menu = nil
             return
         }
         togglePanel()
+    }
+
+    /// The app's menu: on the menu bar icon (right click), or the island's gear while the island
+    /// stands in for the icon.
+    func appMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Open House Control", action: #selector(requestHome), keyEquivalent: "").target = self
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Edit Home…", action: #selector(requestEditor), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Load Floor Plan…", action: #selector(loadPlan), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Reveal Plan File", action: #selector(revealPlan), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Reveal Device Log", action: #selector(revealLog), keyEquivalent: "").target = self
+        menu.addItem(.separator())
+        let islandItem = menu.addItem(withTitle: "Use the Island Instead of the Menu Bar Icon", action: #selector(toggleIsland), keyEquivalent: "")
+        islandItem.target = self
+        islandItem.state = island?.isShown == true ? .on : .off
+        loginState = LoginItem.state
+        let login = loginState
+        let loginItem = menu.addItem(withTitle: login == .needsApproval ? "Open at Login — Allow in Settings…" : "Open at Login",
+                                     action: #selector(toggleOpenAtLogin), keyEquivalent: "")
+        loginItem.target = self
+        loginItem.state = login == .on ? .on : login == .needsApproval ? .mixed : .off
+        menu.addItem(withTitle: "Pair iPhone…", action: #selector(requestPairing), keyEquivalent: "").target = self
+        let aiItem = menu.addItem(withTitle: agent.isLive ? "AI Access — Live" : "AI Access…", action: #selector(requestAgent), keyEquivalent: "")
+        aiItem.target = self
+        aiItem.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)
+        if agent.isLive {
+            menu.addItem(withTitle: "Stop AI Access", action: #selector(stopAgent), keyEquivalent: "").target = self
+        }
+        connectedDevices = sync.connectedDevices
+        for device in connectedDevices {
+            let item = menu.addItem(withTitle: "\(device) is connected", action: nil, keyEquivalent: "")
+            item.image = NSImage(systemSymbolName: "iphone", accessibilityDescription: nil)
+        }
+        menu.addItem(.separator())
+        menu.addItem(aboutMenuItem())
+        menu.addItem(withTitle: "Settings…", action: #selector(requestSettings), keyEquivalent: ",").target = self
+        menu.addItem(withTitle: "Reload", action: #selector(reloadAll), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Quit House Control", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        return menu
+    }
+
+    /// The island stands in for the menu bar icon: one of the two is shown, never both.
+    func updateStatusItem() {
+        statusItem.isVisible = island?.isShown != true
     }
 
     private func togglePanel() {
@@ -493,17 +507,23 @@ final class AppModel: NSObject {
             let host = WebHost(mode: "island", transparent: true) { [unowned self] in
                 var boot = self.plans.bootPayload()
                 boot["island"] = self.island?.bootInfo ?? [:]
+                boot["nativeControls"] = true // the island is drawn natively around this page's model
                 self.stateBoot(&boot)
                 return boot
             }
             host.onMessage = { [weak self, unowned host] message in self?.handle(message, from: host) }
-            let controller = IslandController(host: host)
+            let islandModel = IslandModel(home: home)
+            islandModel.onBump = { [weak self] id in self?.hosts[.island]?.call("bump", id) }
+            islandModel.onMenu = { [weak self] in self?.appMenu().popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil) }
+            self.islandModel = islandModel
+            let controller = IslandController(host: host, model: islandModel)
             controller.onExpandedChange = { [weak self] open in self?.setPolling(open) }
             hosts[.island] = host
             island = controller
         }
         island?.show()
         islandShown = island?.isShown == true
+        updateStatusItem()
     }
 
     @objc private func toggleIsland() { setIsland(island?.isShown != true) }
@@ -512,6 +532,7 @@ final class AppModel: NSObject {
         UserDefaults.standard.set(show, forKey: "island")
         if show { showIsland() } else { island?.hide() }
         islandShown = island?.isShown == true
+        updateStatusItem()
     }
 
     // MARK: - Open at Login

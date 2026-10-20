@@ -279,3 +279,16 @@ html.mode-island #app { display: block; padding: 0; height: 100%; }
   .isle-glow { transform: none; }
 }
 
+
+/* ---------- in the Mac app ---------- */
+/* The app draws the shape, the ears and the controls; the page is the model alone, filling a
+   web view the size of the open island's stage. */
+html.native-controls.mode-island .isle-glow, html.native-controls.mode-island .ear,
+html.native-controls.mode-island .isle-head, html.native-controls.mode-island .isle-side { display: none !important; }
+html.native-controls.mode-island .isle-shape {
+  position: fixed; inset: 0; width: auto; height: auto; border-radius: 0; background: transparent; overflow: visible; transition: none;
+}
+html.native-controls.mode-island .isle-body { position: fixed; inset: 0; width: auto; height: auto; margin: 0; }
+html.native-controls.mode-island .isle-main { display: block; height: 100%; padding: 0; }
+html.native-controls.mode-island .isle-stage { position: fixed; inset: 0; }
+html.native-controls.mode-island .reveal { opacity: 1; translate: none; scale: none; transition: none; }

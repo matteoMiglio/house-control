@@ -7,15 +7,14 @@ private final class IslandPanel: NSPanel {
 }
 
 /// The island: a transparent window pinned to the top of the screen, around the MacBook's
-/// notch. The web content draws a black tab there that shows what is on, springs open
-/// under the pointer and peeks out when something changes. A display without a notch
-/// gets a drawn one in the middle of its menu bar.
+/// notch. `IslandSurface` draws a black tab there that shows what is on, springs open under
+/// the pointer and peeks out when something changes; the island page draws its 3D model. A
+/// display without a notch gets a drawn one in the middle of its menu bar.
 @MainActor
 final class IslandController: NSObject {
-    // Must match island.css: the open island below the notch, and room for its shadow.
-    private static let open = NSSize(width: 664, height: 292)
-    private static let canvas = NSSize(width: 820, height: 470)
-    private static let ear: CGFloat = 64
+    // The island's sizes, as IslandSurface draws it.
+    private static let open = NSSize(width: IslandSurface.open.width, height: IslandSurface.open.height)
+    private static let canvas = NSSize(width: IslandSurface.canvas.width, height: IslandSurface.canvas.height)
 
     let host: WebHost
     private let window: IslandPanel
@@ -29,9 +28,15 @@ final class IslandController: NSObject {
     /// HOUSE_ISLAND_EXPANDED=1 keeps it open (screenshots).
     private let pinned = ProcessInfo.processInfo.environment["HOUSE_ISLAND_EXPANDED"] != nil
     var onExpandedChange: ((Bool) -> Void)?
+    let model: IslandModel
+    private let surface: NSView
 
-    init(host: WebHost) {
+    init(host: WebHost, model: IslandModel) {
         self.host = host
+        self.model = model
+        let surface = FirstMouseHostingView(rootView: IslandSurface(model: model, page: host.webView))
+        surface.sizingOptions = [] // the window keeps its size whatever the island's
+        self.surface = surface
         window = IslandPanel(contentRect: NSRect(origin: .zero, size: Self.canvas),
                              styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         super.init()
@@ -43,14 +48,16 @@ final class IslandController: NSObject {
         window.hidesOnDeactivate = false
         window.animationBehavior = .none
         window.ignoresMouseEvents = true
-        window.contentView = host.webView
+        window.contentView = surface
+        // The model plays its intro once it is revealed; it rests again as soon as the island closes.
+        model.onReveal = { [weak host] shown in host?.call("islandState", shown ? "expanded" : "collapsed") }
         NotificationCenter.default.addObserver(self, selector: #selector(screensChanged),
                                                name: NSApplication.didChangeScreenParametersNotification, object: nil)
     }
 
     /// What the web side needs to draw itself around the notch.
     var bootInfo: [String: Any] {
-        ["notchWidth": Double(notch.width), "notchHeight": Double(notch.height), "hasNotch": hasNotch, "expanded": pinned]
+        ["notchWidth": Double(notch.width), "notchHeight": Double(notch.height), "hasNotch": hasNotch, "expanded": false]
     }
 
     func show() {
@@ -102,6 +109,9 @@ final class IslandController: NSObject {
             let height = bar > 10 ? bar : 28
             notch = NSRect(x: frame.midX - 95, y: frame.maxY - height, width: 190, height: height)
         }
+        model.notchWidth = notch.width
+        model.notchHeight = notch.height
+        model.realNotch = hasNotch
         // A real notch is black in full-screen spaces anyway; a drawn one would cover a film.
         window.collectionBehavior = hasNotch ? [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
                                              : [.canJoinAllSpaces, .stationary, .ignoresCycle]
@@ -117,7 +127,8 @@ final class IslandController: NSObject {
                               width: Self.open.width + 28, height: notch.height + Self.open.height + 18 + 2)
             schedule(zone.contains(point) ? nil : false, after: 0.32)
         } else {
-            let zone = notch.insetBy(dx: -Self.ear, dy: 0).offsetBy(dx: 0, dy: 1)
+            // At rest the ears reach 64 pt beside the notch; while peeking, 132.
+            let zone = notch.insetBy(dx: model.phase == .peek ? -132 : -64, dy: 0).offsetBy(dx: 0, dy: 1)
             schedule(zone.contains(point) ? true : nil, after: 0.09)
         }
     }
@@ -142,7 +153,14 @@ final class IslandController: NSObject {
         guard on != isExpanded else { return }
         isExpanded = on
         window.ignoresMouseEvents = !on
-        host.call("islandState", on ? "expanded" : "collapsed")
+        model.setExpanded(on)
         onExpandedChange?(on)
+    }
+
+    /// A picture of the island as it is drawn (the 3D model, a web view, is not in it).
+    func snapshot(to url: URL) {
+        guard let rep = surface.bitmapImageRepForCachingDisplay(in: surface.bounds) else { return }
+        surface.cacheDisplay(in: surface.bounds, to: rep)
+        try? rep.representation(using: .png, properties: [:])?.write(to: url)
     }
 }

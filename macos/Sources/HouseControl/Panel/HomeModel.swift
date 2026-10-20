@@ -109,8 +109,9 @@ final class HomeModel {
 
     // MARK: - Doing
 
-    func toggleLight(_ id: String) {
-        tellPage?("bump", [id])
+    /// `bump`: the lamp in the panel's model nods (not when the island made the change).
+    func toggleLight(_ id: String, bump: Bool = true) {
+        if bump { tellPage?("bump", [id]) }
         store?.toggleLight(id)
     }
 

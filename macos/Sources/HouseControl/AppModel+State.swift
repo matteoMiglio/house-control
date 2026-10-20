@@ -28,6 +28,7 @@ extension AppModel {
         store.startSimulation()
         homeStore = store
         home.load(plan: plan ?? [:], store: store)
+        islandModel?.reset()
         updateStatus(store.summary)
     }
 
@@ -89,6 +90,7 @@ extension AppModel {
                                "tick": push.tick, "source": (push.source as Any?) ?? NSNull()])
         }
         home.refresh()
+        islandModel?.homeChanged(tick: push.tick, source: push.source)
         if !push.tick { updateStatus(homeStore.summary) }
     }
 }

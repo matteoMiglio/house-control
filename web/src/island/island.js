@@ -20,6 +20,9 @@ const PEEK_MS = 2400;
 
 export async function bootIsland(root) {
   const boot = window.__HOUSE_BOOT__?.island || {};
+  // The Mac app draws the island natively; this page is only its 3D model, sized to fit.
+  const nativeControls = isNative && Boolean(window.__HOUSE_BOOT__?.nativeControls);
+  if (nativeControls) document.documentElement.classList.add('native-controls');
   const query = new URLSearchParams(location.search);
   // The notch this island grows out of, in points. A screen without one gets a drawn tab.
   const notch = {
@@ -255,7 +258,8 @@ export async function bootIsland(root) {
       // (With Reduce Motion the camera does not sweep: the model is simply there.)
       if (was !== 'expanded' && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
         clearTimeout(introTimer);
-        introTimer = setTimeout(() => world?.intro(), 110);
+        // Natively the model is only revealed once the island has grown around it.
+        introTimer = setTimeout(() => world?.intro(), nativeControls ? 0 : 110);
       }
     } else if (was === 'expanded') {
       // Keep drawing while the island closes over the model, then rest.
@@ -321,6 +325,8 @@ export async function bootIsland(root) {
   incoming.adopt = (other) => store.adopt(other);
   incoming.applyRemote = (remote) => store.applyRemote(remote);
   incoming.sync = (next) => store.sync(next);
+  // A chip toggled natively: the lamp in the model nods.
+  incoming.bump = (id) => world?.lights.get(id)?.bump();
 
   // The order the parts of the open island come in: header, model, scenes, devices.
   const stagger = (el, ms) => { el.classList.add('reveal'); el.style.setProperty('--d', `${Math.round(ms)}ms`); };

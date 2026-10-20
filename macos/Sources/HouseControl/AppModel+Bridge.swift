@@ -11,6 +11,8 @@ extension AppModel {
         case "ready":
             // The panel and the island draw the store's state; the store tells the menu bar icon.
             if host === hosts[.primary] || host === hosts[.island] { stateViewReady(host, message: message) }
+            // A (re)loaded island page catches up with an island that is already open.
+            if host === hosts[.island], islandModel?.revealed == true { host.call("islandState", "expanded") }
             // The editor's page catches up with a screen asked for while it was loading.
             if host === hosts[.editor] { showEditorWant() }
             if host === hosts[.primary] {
@@ -26,7 +28,7 @@ extension AppModel {
         case "intent":
             receiveIntent(message, from: host)
         case "pick":
-            home.picked(message)
+            if host === hosts[.primary] { home.picked(message) }
         case "toast":
             home.showToast(message["text"] as? String ?? "", ai: message["ai"] as? String)
         case "widgets":

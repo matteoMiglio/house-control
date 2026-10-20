@@ -34,6 +34,12 @@ struct RGB: Equatable {
 
     var color: Color { Color(.sRGB, red: Self.srgb(r), green: Self.srgb(g), blue: Self.srgb(b)) }
 
+    /// "#rrggbb" (sRGB), as three.js `getHexString` gives it.
+    var hex: String {
+        func byte(_ c: Double) -> Int { Int((Self.srgb(c) * 255).rounded()) }
+        return String(format: "#%02x%02x%02x", byte(r), byte(g), byte(b))
+    }
+
     /// CSS `color-mix(in srgb, <this> (1 - t), #fff t)`: how a lit tile tints its status text.
     func withWhite(_ t: Double) -> Color {
         func mix(_ c: Double) -> Double { Self.srgb(c) * (1 - t) + t }
