@@ -103,6 +103,8 @@ async function boot() {
   const applyInsets = () => (isPhone ? world.setInsets(50 + safeAreaTop(), 36) : world.setInsets(...(isWide() ? WIDE_INSETS : STAGE_INSETS)));
   applyInsets();
   new ResizeObserver(applyInsets).observe(panel.canvas);
+  // In the app the page waits hidden until the panel or the window shows it.
+  if (isNative) world.warm();
   incoming.setChrome = (chrome) => { setChrome(chrome); applyInsets(); };
 
   const show = () => { world.setRunning(true); world.intro(); };

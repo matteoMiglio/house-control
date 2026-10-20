@@ -516,6 +516,10 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
   let awake = 0;       // frames still owed after the last change
   let running = false;
   let shadowFrames = 3;
+  // Right after the page comes on screen the window is still opening and frames arrive late:
+  // the intro holds its first pose (time stands still) until two come on time, or 0.6 s pass.
+  let steadyFrames = 0;
+  let introAt = 0;
 
   function wake(frames = 2) {
     awake = Math.max(awake, frames);
@@ -524,7 +528,12 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
 
   function tick(now) {
     raf = 0;
-    const dt = Math.min(0.05, (now - last) / 1000);
+    let dt = Math.min(0.05, (now - last) / 1000);
+    if (steadyFrames > 0) {
+      steadyFrames = now - last < 25 ? steadyFrames - 1 : 2;
+      if (now - introAt > 600) steadyFrames = 0;
+      dt = 0;
+    }
     last = now;
     let active = updateRig(dt);
     for (const unit of lights.values()) active = unit.update(dt) || active;
@@ -612,7 +621,18 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
       rig.el = rig.goal.el + 9;
       rig.dist = rig.goal.dist * 1.28;
       rig.target.copy(rig.goal.target);
+      steadyFrames = 2;
+      introAt = performance.now();
       wake(4);
+    },
+
+    // Draws one frame nobody sees, shadows and all, while the page waits to be shown: the
+    // first frame on screen (with the intro running) is then no slower than any other.
+    warm() {
+      if (!width || !height) return;
+      renderer.shadowMap.needsUpdate = true;
+      composer.render(0);
+      shadowFrames = 0;
     },
 
     setRunning(on) {

@@ -38,9 +38,26 @@ final class WebSlotView: NSView {
         still.isHidden = false
     }
 
+    /// Arrived in a window, not yet laid out there.
+    private var arriving = false
+
+    // The page is only lent (and told it is on screen) once the slot has its real size: shown
+    // any earlier, the 3D view would start its intro at the old size and be resized mid-way.
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        onPresence?(self, window != nil)
+        arriving = window != nil
+        if arriving {
+            needsLayout = true
+        } else {
+            onPresence?(self, false)
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        guard arriving, !bounds.isEmpty else { return }
+        arriving = false
+        onPresence?(self, true)
     }
 }
 
