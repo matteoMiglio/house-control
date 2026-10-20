@@ -294,8 +294,10 @@ export class LightUnit {
       l.intensity = l.userData.max * out;
       l.color.copy(this.color);
     }
-    // Lamp bodies stay faintly readable when off and hot enough to bloom when on.
-    const e = this.level > 0.001 ? 0.8 + 1.7 * Math.pow(this.level, 0.7) : 0;
+    // Lamp bodies stay faintly readable when off and hot enough to bloom when on. Below the
+    // dimmest setting (5%), which a lamp only passes through while switching, the glow fades
+    // with the light instead of staying hot until the very end and going out in one frame.
+    const e = (0.8 + 1.7 * Math.pow(this.level, 0.7)) * Math.min(1, this.level / 0.05);
     for (const m of this.glow) {
       m.emissive.copy(this.color);
       m.emissiveIntensity = e + this.hover * 0.5;
