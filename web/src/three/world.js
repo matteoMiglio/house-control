@@ -108,8 +108,6 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     scene.add(unit.group, unit.view);
   });
   const outdoorLights = config.outsideArea ? [...lights.values()].filter((u) => u.cfg.room === OUTSIDE) : [];
-  // Cut open, the model has no ground around it: only lamps hung on the house itself are shown.
-  const onHouse = (cfg) => cfg.pos[0] > minX - 0.4 && cfg.pos[0] < maxX + 0.4 && cfg.pos[1] > minZ - 0.4 && cfg.pos[1] < maxZ + 0.4;
   let hitTargets = [];
 
   // Night-time ambience: enough to read the model with every lamp off.
@@ -286,7 +284,8 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
       unit.group.visible = unit.id !== pov && outside;
       unit.view.visible = outside && !pov;
     }
-    for (const unit of outdoorLights) unit.group.visible = house.whole || onHouse(unit.cfg);
+    // Like the cameras, lamps outside (even one on a wall of the house) belong to the view from outside.
+    for (const unit of outdoorLights) unit.group.visible = house.whole;
     drawCoverage();
     // Under the roof the rooms and their devices cannot be seen, so they cannot be picked either.
     const indoors = house.whole && config.roof ? []

@@ -18,7 +18,8 @@ What changed in each release of House Control. The Mac app is on
 - **Zoom in the editor on the Mac:** pinch (or ⌘-scroll) to zoom the plan around the pointer, scroll or drag with
   Space held to move around it (never so far that the home slides out of sight), ⌘+ / ⌘− / ⌘0 and buttons in its
   corner.
-- **Cameras only show from outside:** the cut-open rooms no longer show the ones hung on the house.
+- **Cameras and outside lamps only show from outside:** the cut-open rooms no longer show the ones hung on the
+  house.
 - **The island says when everything is off:** a dimmed house and *Off*, instead of hiding behind the notch. On a
   display without a notch it still steps out of the menu bar then, rather than cover the menu bar items.
 - The island now shows the same controls as the panel for real air conditioners, and follows what the widgets change.
