@@ -9,7 +9,7 @@ What changed in each release of House Control. The Mac app is on
 
 - **Open House Control** (in the menu bar icon's menu and the panel's gear menu, or open the app again) gives it a
   window: the home in 3D with all its controls (on a wide window the controls sit in a column beside the model), and
-  in the sidebar **Edit Home** and **Connections** (the editor), **AI Access**, **Pair iPhone** and **Settings**. The panel and the window show the same home, which moves between them. The editor
+  in the sidebar **Edit Home** (the editor), **Connections**, **AI Access**, **Pair iPhone** and **Settings**. The panel and the window show the same home, which moves between them. The editor
   keeps unsaved changes when you switch to another screen.
 - It stays a menu bar app: the window opens by itself only the very first time, and the Dock icon is there only
   while it is open.
@@ -29,6 +29,9 @@ What changed in each release of House Control. The Mac app is on
 - **On the Mac the controls are native:** the header, scenes, rooms, device tiles, the lamp, AC and camera sheets
   and the notices are SwiftUI now, drawn over the 3D model as before and looking the same. The model, its tooltip
   and the floor plan editor stay web pages; the iPhone keeps its web controls for now.
+- **Connections is native on the Mac too:** Smart Life, Home Assistant, Philips Hue and Apple Home each have their own
+  screen in the window, with the devices they found and which lamp or AC of your plan uses each one. Linking a lamp or
+  an AC to a device stays in Edit Home, which no longer has a Connections row of its own.
 - On the Mac the state of every lamp and AC is now kept by the app itself, not by the panel's web page: the panel,
   the island, the widgets and AI Access all change one shared state, and what you set is kept in the app's data
   folder (taken over once from where the panel kept it before).

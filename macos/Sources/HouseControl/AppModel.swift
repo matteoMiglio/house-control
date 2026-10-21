@@ -19,6 +19,22 @@ final class AppModel: NSObject {
     }
     /// Smart Life is always part of the Mac app.
     var smartLife: SmartLifePlatform { hub.smartLife! }
+    /// The Connections screen.
+    @ObservationIgnored var storedConnections: ConnectionsModel?
+    var connections: ConnectionsModel {
+        if let storedConnections { return storedConnections }
+        let connections = ConnectionsModel(hub: hub, smartLife: smartLife)
+        connections.plan = homePlan
+        connections.onChange = { [weak self] in
+            guard let self else { return }
+            self.connectionsChanged()
+            self.hosts[.editor]?.call("servicesChanged", self.hub.servicesInfo)
+        }
+        connections.phoneUserCode = { [weak self] in self?.phoneUserCode ?? "" }
+        connections.openEditor = { [weak self] in self?.router.show(.editor) }
+        storedConnections = connections
+        return connections
+    }
     /// Hands the floor plan to paired iPhones on the local network.
     @ObservationIgnored private var storedSync: SyncServer?
     var sync: SyncServer {
@@ -32,13 +48,6 @@ final class AppModel: NSObject {
     @ObservationIgnored var loginWindowExpiry: DispatchWorkItem?
     @ObservationIgnored var statusItem: NSStatusItem!
     @ObservationIgnored var panel: PanelController!
-    /// The editor's page, made the first time Edit Home or Connections is shown and kept from then on
-    /// (unsaved changes and all), with the screen it was last asked for.
-    /// What the editor's page is to show — "" (Edit Home), "connections" or one platform's
-    /// "service:<id>" — and what it was last told; it learns it once it is ready, and again
-    /// whenever it reloads.
-    @ObservationIgnored var editorWant = ""
-    @ObservationIgnored var editorShown: String?
     @ObservationIgnored var pollTimer: Timer?
     /// AI Access: the private link an AI assistant uses to run the home.
     @ObservationIgnored private var storedAgent: AgentController?
@@ -122,7 +131,8 @@ final class AppModel: NSObject {
             // Without the menu bar icon (the island is used instead) there is no panel: the window.
             case .panel:
                 if !self.statusItem.isVisible { self.showMainWindow(.home) } else if !self.panel.isVisible { self.togglePanel() }
-            case .editor(let section): self.openEditor(section: section)
+            case .editor: self.showMainWindow(.editor)
+            case .connections(let service): self.openConnections(service)
             case .agent: self.showMainWindow(.agent)
             case .pairing: self.showMainWindow(.pairing)
             case .settings: self.showMainWindow(.settings)
@@ -208,10 +218,15 @@ final class AppModel: NSObject {
         if ProcessInfo.processInfo.environment["HOUSE_OPEN_PAIRING"] != nil {
             router.show(.pairing)
         }
-        // HOUSE_OPEN_EDITOR=1, or connections|smartlife|homeassistant|hue|homekit for that screen.
+        // HOUSE_OPEN_EDITOR=1 for Edit Home, connections|smartlife|homeassistant|hue|homekit for Connections (on that platform).
         if let open = ProcessInfo.processInfo.environment["HOUSE_OPEN_EDITOR"] {
-            let section = open == "connections" ? "connections" : ["smartlife", "homeassistant", "hue", "homekit"].contains(open) ? "service:\(open)" : nil
-            router.show(.editor(section: section))
+            if open == "connections" {
+                router.show(.connections(service: nil))
+            } else if ConnectionsModel.Service(rawValue: open) != nil {
+                router.show(.connections(service: open))
+            } else {
+                router.show(.editor)
+            }
         }
         if let open = ProcessInfo.processInfo.environment["HOUSE_OPEN_AGENT"] {
             router.show(.agent) { [weak self] in
@@ -355,11 +370,6 @@ final class AppModel: NSObject {
 
     func bootPayload() -> [String: Any] {
         var boot = plans.bootPayload()
-        boot["tuya"] = smartLife.tuyaInfo
-        var account = smartLife.smartLifeInfo
-        // Not signed in here yet: offer the User Code a paired iPhone signed in with.
-        if !smartLife.isSmartLifeConnected, !phoneUserCode.isEmpty { account["userCode"] = phoneUserCode }
-        boot["smartLife"] = account
         boot["services"] = hub.servicesInfo
         boot["agentLive"] = agent.isLive
         loginState = LoginItem.state
@@ -372,6 +382,7 @@ final class AppModel: NSObject {
 
     func reloadLinks() {
         loadHomeStore()
+        storedConnections?.plan = homePlan
         hub.setLinks(from: plans.activePlan == "custom" ? plans.customPlan() : nil)
         homeName = plans.activePlan == "custom" ? (plans.customPlanName ?? "My home") : "Demo home"
     }
@@ -450,15 +461,14 @@ final class AppModel: NSObject {
 
     @objc private func requestHome() { router.show(.home) }
     @objc private func requestSettings() { router.show(.settings) }
-    @objc private func requestEditor() { router.show(.editor(section: nil)) }
+    @objc private func requestEditor() { router.show(.editor) }
     @objc private func requestAgent() { router.show(.agent) }
     @objc private func requestPairing() { router.show(.pairing) }
 
-    /// Edit Home (no section) or Connections (`connections`, or one platform's `service:<id>`),
-    /// in the main window.
-    private func openEditor(section: String? = nil) {
-        askEditor(section ?? "")
-        showMainWindow(editorWant.isEmpty ? .editor : .connections)
+    /// Connections in the main window, on one platform's screen when `service` names one.
+    private func openConnections(_ service: String?) {
+        connections.path = service.flatMap(ConnectionsModel.Service.init(rawValue:)).map { [$0] } ?? []
+        showMainWindow(.connections)
     }
 
     func alert(_ title: String, _ text: String) {

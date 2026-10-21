@@ -1,7 +1,6 @@
 import AppKit
 import UniformTypeIdentifiers
 import HouseCore
-import HouseSmartLife
 
 extension AppModel {
     // MARK: - Messages from the web UI
@@ -13,8 +12,6 @@ extension AppModel {
             if host === hosts[.primary] || host === hosts[.island] { stateViewReady(host, message: message) }
             // A (re)loaded island page catches up with an island that is already open.
             if host === hosts[.island], islandModel?.revealed == true { host.call("islandState", "expanded") }
-            // The editor's page catches up with a screen asked for while it was loading.
-            if host === hosts[.editor] { showEditorWant() }
             if host === hosts[.primary] {
                 // A page that could not start shows why; the native controls step aside.
                 home.pageError = message["error"] as? String
@@ -47,7 +44,8 @@ extension AppModel {
         case "openWindow": router.show(.home)
         case "openSettings": router.show(.settings)
         case "revealPlan": revealPlan()
-        case "openEditor": router.show(.editor(section: message["section"] as? String))
+        case "openEditor": router.show(.editor)
+        case "openConnections": router.show(.connections(service: message["service"] as? String))
         case "quit": NSApp.terminate(nil)
         case "setOpenAtLogin": setOpenAtLogin(message["on"] as? Bool ?? false)
 
@@ -86,48 +84,7 @@ extension AppModel {
             } catch {
                 host.reply(to: message, ["error": error.localizedDescription])
             }
-        case "tuya.save":
-            do {
-                try smartLife.saveTuya(accessId: message["accessId"] as? String ?? "",
-                                 accessSecret: message["accessSecret"] as? String ?? "",
-                                 region: message["region"] as? String ?? "eu")
-                host.reply(to: message, smartLife.tuyaInfo)
-            } catch {
-                host.reply(to: message, ["error": error.localizedDescription])
-            }
-        case "tuya.devices":
-            Task { @MainActor in
-                do {
-                    host.reply(to: message, ["devices": try await smartLife.listDevices()])
-                } catch {
-                    host.reply(to: message, ["error": error.localizedDescription])
-                }
-            }
-        case "smartlife.begin":
-            let userCode = message["userCode"] as? String ?? ""
-            Task { @MainActor in
-                do {
-                    let login = try await smartLife.beginLogin(userCode: userCode)
-                    let png = QRCode.png(for: login.qrContent).map { "data:image/png;base64,\($0.base64EncodedString())" }
-                    host.reply(to: message, ["token": login.token, "qr": png ?? ""])
-                } catch {
-                    host.reply(to: message, ["error": error.localizedDescription])
-                }
-            }
-        case "smartlife.poll":
-            let token = message["token"] as? String ?? ""
-            let userCode = message["userCode"] as? String ?? ""
-            Task { @MainActor in
-                let done = await smartLife.finishLogin(token: token, userCode: userCode)
-                host.reply(to: message, ["connected": done, "info": smartLife.smartLifeInfo])
-                if done { sync.broadcast() }
-            }
-        case "smartlife.signOut":
-            smartLife.signOut()
-            host.reply(to: message, smartLife.smartLifeInfo)
-            sync.broadcast()
-
-        // Home Assistant, Philips Hue, Apple Home
+        // The editor's "Real device" pickers (connecting a platform is the native Connections screen)
         case "services.info":
             host.reply(to: message, hub.servicesInfo)
         case "devices.all":
@@ -135,39 +92,6 @@ extension AppModel {
                 let (devices, errors) = await hub.allDevices()
                 host.reply(to: message, ["devices": devices, "errors": errors])
             }
-        case "services.discover":
-            let service = message["service"] as? String ?? ""
-            Task { @MainActor in
-                let found = service == "hue" ? await ServiceDiscovery.hueBridges() : await ServiceDiscovery.homeAssistants()
-                host.reply(to: message, ["found": found])
-            }
-        case "homeassistant.connect":
-            Task { @MainActor in
-                do {
-                    try await hub.connectHomeAssistant(url: message["url"] as? String ?? "", token: message["token"] as? String ?? "")
-                    connectionsChanged()
-                    host.reply(to: message, hub.servicesInfo)
-                } catch {
-                    host.reply(to: message, ["error": error.localizedDescription])
-                }
-            }
-        case "hue.pair":
-            Task { @MainActor in
-                do {
-                    try await hub.pairHue(host: message["host"] as? String ?? "", bridgeId: message["bridgeId"] as? String,
-                                          name: message["name"] as? String)
-                    connectionsChanged()
-                    host.reply(to: message, hub.servicesInfo)
-                } catch is HueService.ButtonNotPressed {
-                    host.reply(to: message, ["waiting": true])
-                } catch {
-                    host.reply(to: message, ["error": error.localizedDescription])
-                }
-            }
-        case "service.disconnect":
-            hub.disconnect(service: message["service"] as? String ?? "")
-            connectionsChanged()
-            host.reply(to: message, hub.servicesInfo)
         default:
             break
         }

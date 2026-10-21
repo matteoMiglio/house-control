@@ -312,7 +312,7 @@ The demo plans in [`web/public/plans`](web/public/plans) are good starting point
   <img src="docs/connections.png" width="820" alt="The editor's Connections: Smart Life, Home Assistant, Philips Hue and Apple Home">
 </p>
 
-Right-click the icon → **Edit Home… → Connections**, and connect what you have:
+Open **Connections** in the window's sidebar, and connect what you have:
 
 | Platform | How | Details |
 | --- | --- | --- |
@@ -321,7 +321,7 @@ Right-click the icon → **Edit Home… → Connections**, and connect what you 
 | **Philips Hue** | Found on your network by itself; press the button on the bridge | [docs/connections.md](docs/connections.md#philips-hue) |
 | **Apple Home** | Allow access on your iPhone; its devices are listed on the Mac for linking | [docs/connections.md](docs/connections.md#apple-home) |
 
-Then select a lamp or an AC on the plan, choose its device under **Real device** (lamps take over what the
+Then, in **Edit Home**, select a lamp or an AC on the plan, choose its device under **Real device** (lamps take over what the
 device can do), and press **Save & apply**. From then on the panel controls the real device. Changes made
 elsewhere show up at once from Home Assistant and Hue, and within 12 seconds from Smart Life.
 

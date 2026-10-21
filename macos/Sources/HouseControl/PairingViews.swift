@@ -58,9 +58,9 @@ struct PairingView: View {
                     SectionTitle("How to pair")
                     Card(padding: 18) {
                         VStack(alignment: .leading, spacing: 16) {
-                            PairingStep(number: 1, text: "Open House Control on your iPhone.")
-                            PairingStep(number: 2, text: "Go to Settings → Pair with Mac.")
-                            PairingStep(number: 3, text: "Point the camera at this code.")
+                            NumberedStep(number: 1, text: "Open House Control on your iPhone.")
+                            NumberedStep(number: 2, text: "Go to Settings → Pair with Mac.")
+                            NumberedStep(number: 3, text: "Point the camera at this code.")
                         }
                     }
                     Text("Keep both devices on the same Wi-Fi. Your floor plan and connections sync directly, encrypted with the key in this code.")
@@ -93,8 +93,8 @@ struct PairingView: View {
     }
 }
 
-/// A numbered instruction beside the code.
-private struct PairingStep: View {
+/// A numbered instruction (pairing an iPhone, connecting a platform).
+struct NumberedStep: View {
     let number: Int
     let text: String
 

@@ -64,7 +64,8 @@ export async function bootEditor(root) {
   let doc = structuredClone(await loadRawConfig());
   for (const key of Object.values(KEYS)) doc[key] ||= [];
 
-  // HOUSE_OPEN_EDITOR=connections|smartlife|homeassistant|hue|homekit opens a connection screen.
+  // HOUSE_OPEN_EDITOR=connections|smartlife|homeassistant|hue|homekit opens a connection screen
+  // (the iPhone and the browser preview: the Mac's are native).
   const sectionOf = (name) => (name === 'connections' ? { kind: 'connections' }
     : name.startsWith('service:') ? { kind: 'service', service: name.slice(8) }
       : name === 'tuya' ? { kind: 'service', service: 'smartlife' } : { kind: 'home' });
@@ -90,10 +91,15 @@ export async function bootEditor(root) {
     },
     toast,
     usedBy: () => links.usedMap(doc),
-    // On the iPhone the connection screens are native ones, shown over the editor.
-    onOpen: (service) => (isPhone && service ? post('openConnection', { service })
-      : select(service ? { kind: 'service', service } : { kind: 'connections' })),
+    onOpen: (service) => openConnections(service),
   });
+  // The connection screens are native: in the Mac's main window, and over the editor on the
+  // iPhone (which keeps this page's overview). The browser preview shows its own.
+  function openConnections(service) {
+    if (isNative && !isPhone) post('openConnections', service ? { service } : {});
+    else if (isPhone && service) post('openConnection', { service });
+    else select(service ? { kind: 'service', service } : { kind: 'connections' });
+  }
   // Smart Life signed in or out on its own screen: the overview and the pickers follow.
   const smartLifeChanged = () => links.refreshInfo().then(() => links.load({ quiet: true }));
 
@@ -347,7 +353,8 @@ export async function bootEditor(root) {
   function renderSidebar() {
     const nodes = [h(`button.row.home-row${sel.kind === 'home' ? '.active' : ''}`, { onclick: () => select({ kind: 'home' }) },
       icon('home', 15), h('span.row-name', 'Home settings')),
-    links.sidebarRow(sel.kind === 'connections' || sel.kind === 'service', () => select({ kind: 'connections' })),
+    // The Mac has Connections in its window's sidebar; the iPhone and the browser preview have it here.
+    ...(isNative && !isPhone ? [] : [links.sidebarRow(sel.kind === 'connections' || sel.kind === 'service', () => openConnections())]),
     h(`button.row.home-row${sel.kind === 'site' ? '.active' : ''}`, { onclick: () => select({ kind: 'site' }) },
       icon('fence', 15), h('span.row-name', 'Property line'), h('span.row-sub', doc.site?.boundary ? `${doc.site.boundary.length} corners` : 'none')),
     h(`button.row.home-row${sel.kind === 'coverage' ? '.active' : ''}`, { onclick: () => select({ kind: 'coverage' }) },
@@ -1877,8 +1884,6 @@ export async function bootEditor(root) {
   validate();
   schedulePreview(0);
   // A plan saved on the other device (the Mac, or the paired iPhone) while this editor is open.
-  // The app asks an editor that is already open to show a section (Connections… in its sidebar).
-  incoming.openSection = (name) => select(sectionOf(name || ''));
   incoming.planArrived = (config, from) => {
     if (dirty) {
       toast(`${from || 'Your other device'} saved a newer plan. Saving here replaces it.`, true);

@@ -24,6 +24,7 @@ extension AppModel {
             guard let self, let catalog = self.hub.homeKit as? RemoteCatalogService else { return }
             catalog.update(devices: devices, from: phone)
             self.hosts[.editor]?.call("servicesChanged", self.hub.servicesInfo)
+            self.storedConnections?.servicesChanged()
         }
         // A home set up or edited on the iPhone becomes this Mac's home too.
         sync.onPlan = { [weak self] data, phone in self?.receivedPlan(data, from: phone) }
@@ -33,6 +34,7 @@ extension AppModel {
             if self.hub.adoptConnections(shared) {
                 self.connectionsChanged()
                 self.hosts[.editor]?.call("servicesChanged", self.hub.servicesInfo)
+                self.storedConnections?.servicesChanged()
             }
         }
         sync.onPeersChanged = { [weak self] in self?.refreshPairingWindow() }

@@ -53,7 +53,7 @@ extension AppModel {
         }
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Open House Control…") { [weak self] in self?.router.show(.home) })
-        menu.addItem(ClosureMenuItem("Edit Home…") { [weak self] in self?.router.show(.editor(section: nil)) })
+        menu.addItem(ClosureMenuItem("Edit Home…") { [weak self] in self?.router.show(.editor) })
         menu.addItem(ClosureMenuItem("AI Access…") { [weak self] in self?.router.show(.agent) })
         menu.addItem(ClosureMenuItem("Load Floor Plan…") { [weak self] in self?.loadPlan() })
         menu.addItem(ClosureMenuItem("Reveal Plan File") { [weak self] in self?.revealPlan() })

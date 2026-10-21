@@ -74,37 +74,16 @@ extension AppModel {
         if let host = agentPage { slot.lend(host.webView) }
     }
 
-    /// Edit Home or Connections came on screen: it shows the editor's page, made the first time.
-    /// Picked in the sidebar, each asks for its own screen (unless what was asked is already on it).
-    func editorSlot(_ slot: WebSlotView, present: Bool, showing: MainSection) {
+    /// Edit Home came on screen: it shows the editor's page, made the first time.
+    func editorSlot(_ slot: WebSlotView, present: Bool) {
         guard present else { return }
-        if (showing == .connections) != !editorWant.isEmpty { askEditor(showing == .connections ? "connections" : "") }
         if hosts[.editor] == nil {
-            let host = WebHost(mode: "editor", transparent: false) { [unowned self] in
-                // Read at every load, so a reload (a new plan, a saved edit) comes back on the same screen.
-                var boot = self.bootPayload()
-                if !self.editorWant.isEmpty { boot["section"] = self.editorWant }
-                self.editorShown = self.editorWant
-                return boot
-            }
+            let host = WebHost(mode: "editor", transparent: false) { [unowned self] in self.bootPayload() }
             host.onMessage = { [weak self, unowned host] message in self?.handle(message, from: host) }
             hosts[.editor] = host
             host.load()
         }
         if let host = hosts[.editor] { slot.lend(host.webView) }
-    }
-
-    /// Asks the editor's page for a screen: at once if it is ready, otherwise once it is.
-    func askEditor(_ section: String) {
-        editorWant = section
-        editorShown = nil // even the same screen again: the user may have moved within the page
-        showEditorWant()
-    }
-
-    func showEditorWant() {
-        guard let host = hosts[.editor], host.isReady, editorShown != editorWant else { return }
-        host.call("openSection", editorWant)
-        editorShown = editorWant
     }
 
     /// Opens the panel, taking its page from the main window if it is there: the window keeps a

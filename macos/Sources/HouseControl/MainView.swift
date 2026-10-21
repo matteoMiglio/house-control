@@ -51,7 +51,8 @@ struct MainView: View {
         } detail: {
             switch model.section {
             case .home: HomeView(model: model)
-            case .editor, .connections: EditorView(model: model, showing: model.section)
+            case .editor: EditorView(model: model)
+            case .connections: ConnectionsView(model: model.connections)
             case .agent: AgentView(model: model)
             case .pairing: PairingView(model: model)
             case .settings: MacSettingsView(model: model)
@@ -60,18 +61,16 @@ struct MainView: View {
     }
 }
 
-/// Edit Home and Connections: the editor's page, its own list and inspector, the full width.
+/// Edit Home: the editor's page, its own list and inspector, the full width.
 private struct EditorView: View {
     let model: AppModel
-    let showing: MainSection
 
     var body: some View {
         // Up under the title bar too: the editor's top bar grows by as much (editor.css), so its
         // colour fills it while its buttons stay below it.
-        WebSlot { slot, present in model.editorSlot(slot, present: present, showing: showing) }
-            .id(showing) // a slot of its own for each, so moving between them lends the page again
+        WebSlot { slot, present in model.editorSlot(slot, present: present) }
             .ignoresSafeArea(.container, edges: .top)
-            .navigationTitle(showing == .connections ? "Connections" : "Edit Home")
+            .navigationTitle("Edit Home")
     }
 }
 
