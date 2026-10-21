@@ -23,7 +23,7 @@ What changed in each release of House Control. The Mac app is on
 - **The island says when everything is off:** a dimmed house and *Off*, instead of hiding behind the notch. On a
   display without a notch it still steps out of the menu bar then, rather than cover the menu bar items.
 - The island now shows the same controls as the panel for real air conditioners, and follows what the widgets change.
-- **The island or the menu bar icon, not both:** with the island on (Settings, or the app's menu), the menu bar icon
+- **The island or the menu bar icon, not both:** the island is off at first. With it on (Settings, or the app's menu), the menu bar icon
   goes away and the open island's gear holds the app's menu; turn the island off and the icon comes back. The island
   is native now too, around the same 3D model.
 - **On the Mac the controls are native:** the header, scenes, rooms, device tiles, the lamp, AC and camera sheets

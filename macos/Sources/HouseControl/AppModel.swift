@@ -506,10 +506,10 @@ final class AppModel: NSObject {
 
     // MARK: - Island
 
-    /// On unless switched off in the menu (or by HOUSE_ISLAND=0 for one run).
+    /// Off unless switched on in Settings or the menu (or by HOUSE_ISLAND=1 for one run).
     private var islandEnabled: Bool {
         if let forced = ProcessInfo.processInfo.environment["HOUSE_ISLAND"] { return forced != "0" }
-        return UserDefaults.standard.object(forKey: "island") as? Bool ?? true
+        return UserDefaults.standard.object(forKey: "island") as? Bool ?? false
     }
 
     private func showIsland() {
@@ -539,7 +539,8 @@ final class AppModel: NSObject {
     @objc private func toggleIsland() { setIsland(island?.isShown != true) }
 
     func setIsland(_ show: Bool) {
-        UserDefaults.standard.set(show, forKey: "island")
+        // A run with its own data folder (HOUSE_DATA_DIR, for tests) leaves the real setting alone.
+        if ProcessInfo.processInfo.environment["HOUSE_DATA_DIR"] == nil { UserDefaults.standard.set(show, forKey: "island") }
         if show { showIsland() } else { island?.hide() }
         islandShown = island?.isShown == true
         updateStatusItem()

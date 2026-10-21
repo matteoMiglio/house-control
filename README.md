@@ -172,7 +172,8 @@ A black tab grows out of the MacBook's notch. On a display without a notch it is
 
 When something changes elsewhere — a scene picked in the panel, a lamp switched from the phone — the island
 peeks out for a moment to say what happened. It never takes the keyboard from the app you are working in.
-**Show Island** in the menu bar icon's right-click menu turns it off.
+It is off at first: turn it on in **Settings**, or with **Use the Island Instead of the Menu Bar Icon** in the
+menu bar icon's right-click menu. While it is on, the menu bar icon steps aside and the island's gear holds the menu.
 
 ## AI Access
 
