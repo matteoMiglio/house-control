@@ -7,7 +7,7 @@ import { outdoorShape, treeShape, VEHICLE_SIZE } from '../config.js';
 
 const MARGIN = 14;   // ground beyond everything on the plan, in metres
 const EAVE = 0.3;    // roof overhang beyond the outer face of the walls
-const ROOF_T = 0.18;
+export const ROOF_T = 0.18; // the flat roof, laid on the walls (solar panels stand on it: energy.js)
 const GROUND_TILE = 3;
 
 function speckle(base, dots, spread) {

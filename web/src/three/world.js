@@ -13,6 +13,7 @@ import { OUTSIDE } from '../config.js';
 import { buildFurniture } from './furniture.js';
 import { LightUnit } from './lights.js';
 import { ACUnit } from './ac.js';
+import { EnergyUnit } from './energy.js';
 
 export const STAGE_BG = '#0a0e1a';
 
@@ -107,6 +108,9 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     cameras.set(cfg.id, unit);
     scene.add(unit.group, unit.view);
   });
+  // Solar panels, a battery and the power flowing between them, the house and the grid.
+  const energy = config.energy ? new EnergyUnit(config, camDir) : null;
+  if (energy) scene.add(energy.group);
   const outdoorLights = config.outsideArea ? [...lights.values()].filter((u) => u.cfg.room === OUTSIDE) : [];
   let hitTargets = [];
 
@@ -271,6 +275,8 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
       scene.add(site.group, site.roof);
     }
     if (site) site.group.visible = site.roof.visible = whole;
+    // Panels stand on the roof; without one (cut open, or a plan without a roof) only their outline shows.
+    energy?.setWhole(whole && config.roof);
     night.visible = !whole;
     day.visible = whole;
     scene.fog = whole ? fog : null;
@@ -379,11 +385,16 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
       unit.apply(store.state.lights[id], { ...opts, delay: opts.stagger ? 0.25 + i++ * 0.06 : 0 });
     }
     for (const [id, unit] of acs) unit.apply(store.state.acs[id], opts);
+    energy?.apply(store.state.energy, opts);
     wake();
   }
 
   const unsubscribe = store.on((change) => {
-    if (change.type === 'tick') return;
+    // A tick is a simulated room temperature, or a new reading of the energy sensors.
+    if (change.type === 'tick') {
+      if (energy) { energy.apply(store.state.energy); wake(); }
+      return;
+    }
     if (change.type === 'light') lights.get(change.id).apply(store.state.lights[change.id]);
     else if (change.type === 'ac') acs.get(change.id).apply(store.state.acs[change.id]);
     else syncAll();
@@ -538,6 +549,7 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     for (const unit of lights.values()) active = unit.update(dt) || active;
     for (const unit of acs.values()) active = unit.update(dt) || active;
     for (const unit of cameras.values()) active = unit.update(dt) || active;
+    if (energy) active = energy.update(dt) || active;
     if (shadowFrames > 0) { renderer.shadowMap.needsUpdate = true; shadowFrames--; active = true; }
     if (active || awake > 0) {
       composer.render(dt);
@@ -570,6 +582,7 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     lights,
     acs,
     cameras,
+    energy,
 
     get outside() { return outside; },
     /** The whole house on its site, seen from outside — or cut open to look into the rooms. */
@@ -662,6 +675,7 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
         for (const unit of lights.values()) unit.update(0.05);
         for (const unit of acs.values()) unit.update(0.05);
         for (const unit of cameras.values()) unit.update(0.05);
+        energy?.update(0.05);
       }
       renderer.shadowMap.needsUpdate = true;
       composer.render(0);
