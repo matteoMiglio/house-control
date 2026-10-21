@@ -24,6 +24,10 @@ const STREAK = 0.38;   // metres
 const PEAK_FLOOR = 120; // W per m² of panels: what counts as bright before anything brighter was seen
 
 const ease = (dt, rate = EASE) => 1 - Math.exp(-dt * rate);
+const HIT_MAT = new THREE.MeshBasicMaterial();
+// What a pointer finds: never drawn, like a lamp's.
+const hitBox = (w, h, d) => Object.assign(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), HIT_MAT), { visible: false });
+const OUTLINE_BAND = 0.3; // metres: how wide the outline of the panels can be picked, cut open
 const fade = (watts) => THREE.MathUtils.clamp((Math.abs(watts) - IDLE_WATTS) / 80, 0, 1);
 
 /* ---------- panels ---------- */
@@ -64,7 +68,7 @@ function panelArray(p, H, look) {
   solid.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   posts.traverse((o) => { o.castShadow = true; });
 
-  // Cut open, there is no roof to stand on: only the outline of each module, and a glow.
+  // A plan without a roof has nothing to stand them on: only the outline of each module, and a glow.
   const ghost = new THREE.Group();
   const fill = new THREE.InstancedMesh(new THREE.PlaneGeometry(cw - GAP * 2, cd - GAP * 2).rotateX(-Math.PI / 2), look.ghostFill, cols * rows);
   fill.instanceMatrix = cells.instanceMatrix;
@@ -75,7 +79,21 @@ function panelArray(p, H, look) {
   ghost.add(fill, new THREE.LineSegments(lines, look.ghostLine));
   tilted.add(ghost);
 
-  return { group, solid: [solid, posts], ghost: [ghost], area: w * d, top: new THREE.Vector3(p.pos[0], H + ROOF_T + (RACK + high) / 2, p.pos[1]) };
+  // Picked: the panels as they stand; without a roof, only a band along their outline, so what
+  // lies below can still be picked through the middle.
+  const hits = {
+    solid: [at(hitBox(w + 0.1, 0.14, d + 0.1), 0, 0.03, -d / 2)],
+    ghost: [
+      at(hitBox(w + OUTLINE_BAND, 0.14, OUTLINE_BAND), 0, 0.03, 0),
+      at(hitBox(w + OUTLINE_BAND, 0.14, OUTLINE_BAND), 0, 0.03, -d),
+      at(hitBox(OUTLINE_BAND, 0.14, d), -w / 2, 0.03, -d / 2),
+      at(hitBox(OUTLINE_BAND, 0.14, d), w / 2, 0.03, -d / 2),
+    ],
+  };
+  const mark = at(new THREE.Object3D(), 0, 0.12, -d / 2); // where a tooltip points
+  tilted.add(...hits.solid, ...hits.ghost, mark);
+
+  return { group, solid: [solid, posts], ghost: [ghost], hits, mark, area: w * d, top: new THREE.Vector3(p.pos[0], H + ROOF_T + (RACK + high) / 2, p.pos[1]) };
 }
 
 /* ---------- battery ---------- */
@@ -99,7 +117,10 @@ function batteryModel() {
   });
   const led = new THREE.MeshStandardMaterial({ color: '#30343c', roughness: 0.4, emissive: '#000000' });
   group.add(at(box(0.07, 0.012, 0.006, led, { r: 0 }), 0, 0.97, 0.1));
-  return { group, segments, led };
+  const hit = at(hitBox(0.72, 1.12, 0.32), 0, 0.56, 0);
+  const mark = at(new THREE.Object3D(), 0, 1.1, 0);
+  group.add(hit, mark);
+  return { group, segments, led, hit, mark };
 }
 
 /* ---------- flow lines ---------- */
@@ -219,7 +240,10 @@ export class EnergyUnit {
       ghostLine: new THREE.LineBasicMaterial({ color: '#8fb6ff', transparent: true, opacity: 0.3, depthWrite: false }),
     };
     this.arrays = energy.panels.map((p) => panelArray(p, H, this.look));
-    for (const a of this.arrays) this.group.add(a.group);
+    this.arrays.forEach((a, i) => {
+      this.group.add(a.group);
+      for (const hit of [...a.hits.solid, ...a.hits.ghost]) hit.userData = { kind: 'energy', id: 'solar', array: i };
+    });
     this.area = this.arrays.reduce((sum, a) => sum + a.area, 0);
 
     // The battery, at the back of its footprint, facing `rot`.
@@ -228,6 +252,7 @@ export class EnergyUnit {
     if (b) {
       this.battery.group.position.set(b.pos[0], 0, b.pos[1]);
       this.battery.group.rotation.y = THREE.MathUtils.degToRad(b.rot || 0);
+      this.battery.hit.userData = { kind: 'energy', id: 'battery' };
       this.group.add(this.battery.group);
     }
 
@@ -277,18 +302,34 @@ export class EnergyUnit {
     this.setWhole(false);
   }
 
-  /** Seen whole (from outside) or cut open. Panels stand on the roof: without one (cut open, or a
-   *  plan without a roof) only their outline shows. The power flow belongs to the view from
-   *  outside, roof or not; the cut-open rooms are about lamps and ACs. */
+  /** Seen whole (from outside) or cut open. The panels and the power flow belong to the view from
+   *  outside, roof or not (a plan without a roof shows the panels' outline); the cut-open rooms
+   *  are about lamps and ACs. */
   setWhole(whole, roof = true) {
     this.whole = whole;
+    this.roof = roof;
     for (const a of this.arrays) {
       for (const o of a.solid) o.visible = whole && roof;
-      for (const o of a.ghost) o.visible = !(whole && roof);
+      for (const o of a.ghost) o.visible = whole && !roof;
     }
     // A battery outside the house belongs to the view from outside, like the lamps out there.
     if (this.battery) this.battery.group.visible = whole || Boolean(this.cfg.battery.room);
     for (const line of Object.values(this.lines)) if (line) line.shown = whole;
+  }
+
+  /** What the pointer can pick as seen now: the panels (or their outline) from outside, and the
+   *  battery unless it stands in a room under the roof. Never the power flow. */
+  get hitTargets() {
+    const covered = this.whole && this.roof;
+    const panels = this.whole ? this.arrays.flatMap((a) => (covered ? a.hits.solid : a.hits.ghost)) : [];
+    const battery = this.battery?.group.visible && !(covered && this.cfg.battery.room) ? [this.battery.hit] : [];
+    return [...panels, ...battery];
+  }
+
+  /** Where a tooltip for a picked part points, in world space. */
+  anchor(target, out) {
+    const mark = target.id === 'battery' ? this.battery?.mark : this.arrays[target.array ?? 0]?.mark;
+    return mark ? mark.getWorldPosition(out) : null;
   }
 
   /** The output that looks brightest: the plan's peak, or the most seen so far. */

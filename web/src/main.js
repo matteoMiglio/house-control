@@ -95,6 +95,7 @@ async function boot() {
         if (target.kind === 'light') { haptic('light'); store.toggleLight(target.id); return; }
         if (nativeControls) { post('pick', pickMessage(target)); return; }
         else if (target.kind === 'ac' || target.kind === 'camera') panel.openSheet(target);
+        else if (target.kind === 'energy') panel.openSheet({ kind: 'energy' });
         else if (target.kind === 'room') panel.selectRoom(target.id);
       },
     });

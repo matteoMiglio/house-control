@@ -14,10 +14,12 @@ globalThis.localStorage = {
 const { normalize, tidyEnergy } = await import('../src/config.js');
 const {
   energyFlows: flows, consumption, gridPower, energySimulation, stepEnergy, SIM_DAY, IDLE_WATTS,
-  formatWatts, formatCharge, gridStatus, batteryStatus, energyHas, energyName, energyStatus,
+  formatWatts, formatCharge, gridStatus, batteryStatus, batteryLine, energyHas, energyName, energyStatus,
 } = await import('../src/energy.js');
 const { createStore } = await import('../src/store.js');
 const { EnergyUnit } = await import('../src/three/energy.js');
+const { pickOf } = await import('../src/three/world.js');
+const THREE = await import('three');
 
 const rooms = [{ id: 'living', rect: [0, 0, 6, 4] }, { id: 'garage', rect: [6, 0, 3, 4] }];
 const plan = (energy) => normalize({ rooms, energy });
@@ -137,6 +139,11 @@ test('the panel writes powers in W below 1 kW, in kW from there', () => {
   assert.equal(batteryStatus({ battery: 1250 }), 'Discharging 1.3 kW');
   assert.equal(batteryStatus({ battery: 5 }), 'Idle');
   assert.equal(batteryStatus({}), '—');
+  assert.equal(batteryLine({ charge: 78.4, battery: -1200 }), '78% · Charging 1.2 kW');
+  assert.equal(batteryLine({ charge: 40, battery: 3 }), '40% · Idle');
+  assert.equal(batteryLine({ charge: 40, battery: null }), '40%');
+  assert.equal(batteryLine({ battery: 900 }), 'Discharging 900 W');
+  assert.equal(batteryLine({}), '—');
 });
 
 test('the Solar tile shows what the plan has, and a dash for what is not known', () => {
@@ -268,4 +275,44 @@ test('without a roof the panels show as an outline, and the rest still shows fro
   assert.equal(unit.lines.gridHouse.shown, true, 'the power flow');
   unit.setWhole(true, true);
   assert.ok(unit.arrays[0].solid.every((o) => o.visible));
+});
+
+test('the panels and the battery can be pointed at, as they show, and never the power flow', () => {
+  const config = plan({ panels: [{ pos: [3, 2], size: [4, 3.4] }], battery: { pos: [1, 1], room: 'living' } });
+  const unit = new EnergyUnit({ ...config, wallHeight: 2.6 }, { x: 0.56, z: 0.83 });
+  const kinds = () => unit.hitTargets.map((o) => `${o.userData.id}${o.userData.array ?? ''}`);
+  // Cut open: the battery in its room, and no panels.
+  assert.deepEqual(kinds(), ['battery']);
+  assert.ok([...unit.arrays[0].solid, ...unit.arrays[0].ghost].every((o) => !o.visible), 'no panels in the cut-open rooms');
+  // From outside, under the roof: the panels as they stand; the battery indoors is out of sight.
+  unit.setWhole(true, true);
+  assert.deepEqual(kinds(), ['solar0']);
+  // From outside without a roof: the outline again, and the battery.
+  unit.setWhole(true, false);
+  assert.deepEqual(kinds(), ['solar0', 'solar0', 'solar0', 'solar0', 'battery']);
+  const lines = new Set(Object.values(unit.lines).flatMap((l) => (l ? [l.track, l.streaks] : [])));
+  assert.ok(unit.hitTargets.every((o) => !lines.has(o) && o !== unit.ring && !o.visible));
+
+  // Without a roof, a ray down through the middle of the outline finds nothing of it (what lies
+  // below can be picked); one through its edge finds the panels.
+  unit.setWhole(true, false);
+  unit.group.updateMatrixWorld(true);
+  const ray = new THREE.Raycaster();
+  const down = (x, z) => { ray.set(new THREE.Vector3(x, 20, z), new THREE.Vector3(0, -1, 0)); return ray.intersectObjects(unit.hitTargets, false); };
+  assert.equal(down(3, 2).length, 0);
+  assert.equal(down(1, 2)[0]?.object.userData.id, 'solar');
+  const out = new THREE.Vector3();
+  assert.ok(unit.anchor({ id: 'battery' }, out) && out.y > 1 && Math.hypot(out.x - 1, out.z - 1) < 0.1, 'the tooltip points at the top of the battery');
+  assert.ok(unit.anchor({ id: 'solar', array: 0 }, out) && out.y > 2.6);
+});
+
+test('a lamp or an AC under the panels wins the pointer; the panels win over the floor', () => {
+  const hit = (kind, id) => ({ object: { userData: { kind, id } } });
+  const solar = hit('energy', 'solar');
+  assert.equal(pickOf([solar, hit('light', 'lamp'), hit('room', 'living')]).id, 'lamp');
+  assert.equal(pickOf([solar, hit('room', 'living'), hit('ac', 'ac')]).id, 'ac');
+  assert.equal(pickOf([solar, hit('room', 'living')]).id, 'solar');
+  assert.equal(pickOf([hit('energy', 'battery'), hit('light', 'lamp')]).id, 'battery', 'the battery is a device: the nearest wins');
+  assert.equal(pickOf([hit('light', 'lamp'), hit('energy', 'battery')]).id, 'lamp');
+  assert.equal(pickOf([]), null);
 });

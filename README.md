@@ -143,7 +143,7 @@ go on; **Quit** in the menu bar icon's menu (or ⌘Q in a window) ends it.
 | Drag sideways across a light tile | Dim it |
 | Click the sliders icon on a light tile | Brightness, white temperature, colour |
 | Click an AC, or its tile | Open its sheet: temperature, mode, fan speed |
-| Click the **Solar** tile | What the panels make, what the house uses, the grid and the battery, live |
+| Click the **Solar** tile, or the solar panels or the battery in the 3D view | What the panels make, what the house uses, the grid and the battery, live (hover them for the gist) |
 | Click a room | Zoom in on it and list only its devices |
 | Click the trees button (on the iPhone, in the corner of the 3D view) | See the house from outside, with its cameras; click it again to go back inside |
 | Click **Outside** among the rooms | Lamps outside the house, seen from outside |

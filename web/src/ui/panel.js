@@ -7,7 +7,7 @@ import { lightColor } from '../three/lights.js';
 import { MODE_COLORS } from '../three/ac.js';
 import { FLOW_COLORS, chargeColor } from '../three/energy.js';
 import {
-  IDLE_WATTS, consumption, wattsParts, formatWatts, formatCharge, gridStatus, batteryStatus, energyHas, energyName, energyStatus,
+  IDLE_WATTS, consumption, wattsParts, formatWatts, formatCharge, gridStatus, batteryStatus, batteryLine, energyHas, energyName, energyStatus,
 } from '../energy.js';
 import { AC_SWINGS } from '../store.js';
 import { haptic, isPhone } from '../bridge.js';
@@ -608,6 +608,14 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     if (hit.kind === 'camera') {
       const cfg = config.cameras.find((c) => c.id === hit.id);
       name = cfg.name; status = `${cfg.fov}° · ${cfg.range} m`; on = true; color = '#7fd3ff';
+    } else if (hit.kind === 'energy') {
+      // Live while hovered: the view asks again as the readings move it.
+      const e = state.energy;
+      if (hit.id === 'battery') {
+        name = 'Battery'; status = batteryLine(e); on = Number.isFinite(e.charge); color = chargeColor(e.charge);
+      } else {
+        name = 'Solar'; status = formatWatts(e.solar); on = e.solar >= IDLE_WATTS; color = FLOW_COLORS.solar;
+      }
     } else if (hit.kind === 'light') {
       const cfg = store.lightCfg.get(hit.id);
       const s = state.lights[hit.id];

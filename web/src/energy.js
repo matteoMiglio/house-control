@@ -98,6 +98,12 @@ export function gridStatus(e, energy) {
   return `${g > 0 ? 'Importing' : 'Exporting'} ${formatWatts(g)}`;
 }
 
+/** The battery in a line: "78% · Charging 1.2 kW", what is known of it, or "—". */
+export function batteryLine(e) {
+  const parts = [known(e.charge) && formatCharge(e.charge), known(e.battery) && batteryStatus(e)].filter(Boolean);
+  return parts.length ? parts.join(' · ') : '—';
+}
+
 /** "Charging 700 W", "Discharging 1.2 kW", "Idle", or "—". */
 export function batteryStatus(e) {
   if (!known(e.battery)) return '—';

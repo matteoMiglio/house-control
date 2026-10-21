@@ -242,6 +242,7 @@ final class HomeModel {
         let id = message["id"] as? String ?? ""
         switch message["kind"] as? String {
         case "ac": openSheet(.ac(id))
+        case "energy": if config.energy != nil { openSheet(.energy) }
         case "room": selectRoom(id)
         case "camera":
             guard let c = message["camera"] as? [String: Any] else { return }

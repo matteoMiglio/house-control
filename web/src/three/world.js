@@ -48,6 +48,18 @@ const PictureFrame = {
     }`,
 };
 
+/**
+ * What the pointer picks of what the ray hit (nearest first): a device (a lamp, an AC, a camera,
+ * the battery) before the solar panels, which lie over the rooms and what is in them cut open,
+ * and anything before the floor it stands on.
+ */
+export function pickOf(hits) {
+  const rank = ({ kind, id }) => (kind === 'room' ? 2 : kind === 'energy' && id === 'solar' ? 1 : 0);
+  let best = null;
+  for (const h of hits) if (!best || rank(h.object.userData) < rank(best.object.userData)) best = h;
+  return best?.object.userData ?? null;
+}
+
 export function createWorld(canvas, config, store, { onHover, onPick, background = STAGE_BG, outside: startOutside = false }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -295,7 +307,8 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     // Under the roof the rooms and their devices cannot be seen, so they cannot be picked either.
     const indoors = house.whole && config.roof ? []
       : [...[...lights.values()].filter((u) => !outdoorLights.includes(u)).map((u) => u.hit), ...[...acs.values()].map((u) => u.hit), ...house.floors];
-    hitTargets = [...[...cameras.values(), ...outdoorLights].filter((u) => u.group.visible).map((u) => u.hit), ...indoors];
+    hitTargets = [...[...cameras.values(), ...outdoorLights].filter((u) => u.group.visible).map((u) => u.hit), ...indoors,
+      ...(energy?.hitTargets || [])];
   }
 
   function drawCoverage() {
@@ -411,11 +424,7 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
     const r = canvas.getBoundingClientRect();
     ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
     raycaster.setFromCamera(ndc, camera);
-    const hits = raycaster.intersectObjects(hitTargets, false);
-    if (!hits.length) return null;
-    // Devices win over the floor they stand on.
-    const device = hits.find((h) => h.object.userData.kind !== 'room');
-    return (device || hits[0]).object.userData;
+    return pickOf(raycaster.intersectObjects(hitTargets, false));
   }
 
   function unitOf(t) {
@@ -424,13 +433,14 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
 
   function screenAnchor(t) {
     const unit = unitOf(t);
-    if (!unit) return null;
-    unit.anchor(v).project(camera);
+    if (unit) unit.anchor(v);
+    else if (t?.kind !== 'energy' || !energy?.anchor(t, v)) return null;
+    v.project(camera);
     return { x: (v.x * 0.5 + 0.5) * width, y: (-v.y * 0.5 + 0.5) * height };
   }
 
   function setHover(t) {
-    const same = hovered?.kind === t?.kind && hovered?.id === t?.id;
+    const same = hovered?.kind === t?.kind && hovered?.id === t?.id && hovered?.array === t?.array;
     if (same) return;
     const prev = unitOf(hovered);
     if (prev) prev.hoverGoal = 0;

@@ -322,6 +322,7 @@ export async function bootEditor(root) {
         onHover() {},
         onPick(t) {
           if (!t) return;
+          if (t.kind === 'energy') { select(t.id === 'battery' ? { kind: 'battery', index: 0 } : { kind: 'panel', index: t.array }); return; }
           const index = doc[KEYS[t.kind]].findIndex((x) => x.id === t.id);
           if (index >= 0) select({ kind: t.kind, index });
         },
