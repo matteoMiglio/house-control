@@ -2,11 +2,13 @@
 // things around on, an inspector for the selected item, a live 3D preview and the links to
 // real devices. On a phone the same pieces are laid out for a finger: the plan fills the
 // screen, the inspector is a sheet from the bottom, pinch zooms and drag pans.
+// Solar panels and a home battery live in the plan's energy section, one level down.
 import './editor.css';
 import {
   normalize, loadRawConfig, LIGHT_KINDS, FLOOR_KINDS, isLinked, OUTDOOR_KINDS, OUTDOOR_HEIGHT, GROUND_KINDS, outdoorShape,
-  withCameraDefaults, VEHICLE_SIZE, OUTSIDE, OUTSIDE_NAME, OUTDOOR_LIGHTS, WALL_LIGHTS,
+  withCameraDefaults, VEHICLE_SIZE, OUTSIDE, OUTSIDE_NAME, OUTDOOR_LIGHTS, WALL_LIGHTS, PANEL_MODULE,
 } from '../config.js';
+import { energySimulation, stepEnergy, SIM_DAY } from '../energy.js';
 import { createWorld } from '../three/world.js';
 import { wallSegments, EXT_T } from '../three/house.js';
 import { viewEdge, cameraColor } from '../three/cctv.js';
@@ -33,6 +35,8 @@ const TITLES = {
   room: 'Rooms', light: 'Lights', ac: 'Air conditioners', camera: 'Security cameras', furniture: 'Furniture',
   opening: 'Doors & windows', outdoor: 'Outside', scene: 'Scenes',
 };
+// The energy section's screen, and its items: arrays of solar panels and the battery.
+const ENERGY_KINDS = ['energy', 'panel', 'battery'];
 const OUTDOOR_LABEL = { fence: 'Fence', wall: 'Garden wall', hedge: 'Hedge', gate: 'Gate', tree: 'Tree', car: 'Car', van: 'Van', building: 'Shed or garage', paving: 'Paving' };
 const RESOLUTIONS = [['1920x1080', '1080p · 2 MP'], ['2560x1440', '2K · 4 MP'], ['2688x1520', '4 MP (2688 × 1520)'], ['2592x1944', '5 MP · 4:3'], ['3840x2160', '4K · 8 MP']];
 // Plan handles: dragging one reshapes or aims the selected item instead of moving it.
@@ -63,6 +67,9 @@ const slug = (t) => String(t).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(
 export async function bootEditor(root) {
   let doc = structuredClone(await loadRawConfig());
   for (const key of Object.values(KEYS)) doc[key] ||= [];
+  // The list an item of the plan is in (the battery is a list of one).
+  const listOf = (kind) => (kind === 'panel' ? doc.energy?.panels || []
+    : kind === 'battery' ? (doc.energy?.battery ? [doc.energy.battery] : []) : doc[KEYS[kind]]);
 
   // HOUSE_OPEN_EDITOR=connections|smartlife|homeassistant|hue|homekit opens a connection screen
   // (the iPhone and the browser preview: the Mac's are native).
@@ -87,7 +94,7 @@ export async function bootEditor(root) {
   const links = createConnections({
     rerender: () => {
       renderSidebar();
-      if (['connections', 'service', 'light', 'ac'].includes(sel.kind)) renderInspector();
+      if (['connections', 'service', 'light', 'ac', 'energy'].includes(sel.kind)) renderInspector();
     },
     toast,
     usedBy: () => links.usedMap(doc),
@@ -160,7 +167,7 @@ export async function bootEditor(root) {
     to.push(JSON.stringify(doc));
     doc = JSON.parse(from.pop());
     lastSnapshotKey = null;
-    if (sel.index != null && !doc[KEYS[sel.kind]]?.[sel.index]) sel = { kind: 'home' };
+    if (sel.index != null && !listOf(sel.kind)?.[sel.index]) sel = { kind: 'home' };
     nameInput.value = doc.name || '';
     touch();
   }
@@ -179,8 +186,9 @@ export async function bootEditor(root) {
     const before = sel.kind;
     sel = next;
     lastSnapshotKey = null;
-    // Cameras and what is outside are best seen from outside; a camera through its own lens.
-    if (['camera', 'outdoor', 'site', 'coverage'].includes(next.kind) && before !== next.kind) previewOutside = true;
+    // Cameras, what is outside and the panels on the roof are best seen from outside; a camera
+    // through its own lens.
+    if (['camera', 'outdoor', 'site', 'coverage', 'energy', 'panel'].includes(next.kind) && before !== next.kind) previewOutside = true;
     if (next.kind === 'camera' && before !== 'camera') previewPov = true;
     renderSidebar();
     renderPlan();
@@ -271,6 +279,9 @@ export async function bootEditor(root) {
     const state = { lights: {}, acs: {} };
     for (const l of cfg.lights) state.lights[l.id] = { on: previewLights, brightness: 0.85, temp: 3200, color: l.color || null };
     for (const a of cfg.acs) state.acs[a.id] = { on: previewLights, mode: 'cool', fan: 'auto', swing: 'swing', sleep: false, target: 23 };
+    // A sunny morning, so the panels, the battery and the power flow show what they look like.
+    const sim = cfg.energy && energySimulation({ ...cfg.energy, sensors: {} });
+    state.energy = sim ? stepEnergy(sim, SIM_DAY * 0.4, 0) : {};
     return { state, on: () => () => {} };
   }
 
@@ -358,7 +369,9 @@ export async function bootEditor(root) {
     h(`button.row.home-row${sel.kind === 'site' ? '.active' : ''}`, { onclick: () => select({ kind: 'site' }) },
       icon('fence', 15), h('span.row-name', 'Property line'), h('span.row-sub', doc.site?.boundary ? `${doc.site.boundary.length} corners` : 'none')),
     h(`button.row.home-row${sel.kind === 'coverage' ? '.active' : ''}`, { onclick: () => select({ kind: 'coverage' }) },
-      icon('radar', 15), h('span.row-name', 'Camera coverage'), h('span.row-sub', coverageSummary()))];
+      icon('radar', 15), h('span.row-name', 'Camera coverage'), h('span.row-sub', coverageSummary())),
+    h(`button.row.home-row${ENERGY_KINDS.includes(sel.kind) ? '.active' : ''}`, { onclick: () => select({ kind: 'energy' }) },
+      icon('sun', 15), h('span.row-name', 'Solar & battery'), h('span.row-sub', energySummary()))];
     for (const kind of Object.keys(KEYS)) {
       const items = doc[KEYS[kind]];
       nodes.push(h('div.group',
@@ -379,6 +392,14 @@ export async function bootEditor(root) {
     sidebar.scrollTop = top;
   }
 
+  function energySummary() {
+    const n = doc.energy?.panels?.length || 0;
+    return [n ? `${n} ${n === 1 ? 'array' : 'arrays'}` : null, doc.energy?.battery ? 'battery' : null].filter(Boolean).join(' · ') || 'none';
+  }
+
+  // How many modules an array of panels holds (what the 3D view draws).
+  const modules = (p) => Math.max(1, Math.round(p.size[0] / PANEL_MODULE[0])) * Math.max(1, Math.round(p.size[1] / PANEL_MODULE[1]));
+
   function coverageSummary() {
     if (!doc.cameras.length) return 'no cameras';
     const c = coverageNow();
@@ -393,8 +414,10 @@ export async function bootEditor(root) {
 
   function add(kind, { outside = kind === 'light' && outsideKinds.includes(sel.kind) } = {}) {
     if (kind === 'light' && outside) { addOutdoorLight(); return; }
+    if (kind === 'panel') { addPanels(); return; }
+    if (kind === 'battery') { addBattery(); return; }
     snapshot();
-    const room = (sel.kind === 'room' && doc.rooms[sel.index]) || doc.rooms.find((r) => r.id === doc[KEYS[sel.kind]]?.[sel.index]?.room) || doc.rooms[0];
+    const room = (sel.kind === 'room' && doc.rooms[sel.index]) || doc.rooms.find((r) => r.id === listOf(sel.kind)?.[sel.index]?.room) || doc.rooms[0];
     const center = room ? [fix(room.rect[0] + room.rect[2] / 2), fix(room.rect[1] + room.rect[3] / 2)] : [1, 1];
     const list = doc[KEYS[kind]];
     if (kind === 'room') {
@@ -437,6 +460,43 @@ export async function bootEditor(root) {
     doc.lights.push({ id: uniqueId('outside.light'), name: 'Garden light', room: OUTSIDE, type: 'post', pos: [fix(round((b.minX + b.maxX) / 2)), fix(b.maxZ + 1.5)], capabilities: [] });
     sel = { kind: 'light', index: doc.lights.length - 1 };
     touch();
+  }
+
+  // An array of eight solar panels (four across, two up the slope) in the middle of the roof,
+  // facing south; fewer on a small roof.
+  function addPanels() {
+    snapshot();
+    const b = bounds({ house: true });
+    const [mw, md] = PANEL_MODULE;
+    const across = clamp(Math.floor((b.maxX - b.minX - 1) / mw), 1, 4);
+    const up = clamp(Math.floor((b.maxZ - b.minZ - 1) / md), 1, 2);
+    doc.energy ||= {};
+    (doc.energy.panels ||= []).push({
+      pos: [fix(round((b.minX + b.maxX) / 2)), fix(round((b.minZ + b.maxZ) / 2))], size: [fix(across * mw), fix(up * md)], rot: 0,
+    });
+    sel = { kind: 'panel', index: doc.energy.panels.length - 1 };
+    touch();
+  }
+
+  // A battery on the floor of the selected room (or the first one), against its north wall.
+  function addBattery() {
+    const room = (sel.kind === 'room' && doc.rooms[sel.index]) || doc.rooms[0];
+    if (!room) return toast('Add a room first', true);
+    snapshot();
+    const [x, z, w] = room.rect;
+    doc.energy ||= {};
+    doc.energy.battery = { pos: [fix(round(x + Math.max(0.5, w - 0.7))), fix(z + 0.17)], room: room.id };
+    sel = { kind: 'battery', index: 0 };
+    touch();
+  }
+
+  // An energy section with nothing left in it goes.
+  function tidyEnergy() {
+    const e = doc.energy;
+    if (!e) return;
+    if (!e.panels?.length) delete e.panels;
+    if (!Object.keys(e.sensors || {}).length) delete e.sensors;
+    if (!Object.keys(e).length) delete doc.energy;
   }
 
   // A property line a few metres around the house.
@@ -502,6 +562,15 @@ export async function bootEditor(root) {
   }
 
   function remove(kind, index) {
+    if (kind === 'panel' || kind === 'battery') {
+      snapshot();
+      if (kind === 'panel') doc.energy.panels.splice(index, 1);
+      else delete doc.energy.battery;
+      tidyEnergy();
+      sel = { kind: 'energy' };
+      touch();
+      return;
+    }
     snapshot();
     const [gone] = doc[KEYS[kind]].splice(index, 1);
     if (kind === 'room') {
@@ -534,6 +603,7 @@ export async function bootEditor(root) {
         if (Array.isArray(o.rect)) { take(o.rect); take([o.rect[0] + o.rect[2], o.rect[1] + o.rect[3]]); }
       }
       for (const c of doc.cameras) take(c.pos);
+      take(doc.energy?.battery?.pos);
     }
     return { minX: Math.min(...xs), minZ: Math.min(...zs), maxX: Math.max(...xs), maxZ: Math.max(...zs) };
   }
@@ -669,6 +739,26 @@ export async function bootEditor(root) {
         sv('path', { d: `M${-w / 4} ${d / 2}H${w / 4}`, class: 'front' })));
     });
 
+    // Solar panels lie on the roof, over the rooms: drawn faint, and only picked up while the
+    // energy section is open, so the rooms under them stay easy to grab.
+    const energyOpen = ENERGY_KINDS.includes(sel.kind);
+    (doc.energy?.panels || []).forEach((p, i) => {
+      if (!Array.isArray(p.pos) || !Array.isArray(p.size)) return;
+      const [w, d] = p.size;
+      const cols = Math.max(1, Math.round(w / PANEL_MODULE[0]));
+      const rows = Math.max(1, Math.round(d / PANEL_MODULE[1]));
+      const cells = [];
+      for (let c = 1; c < cols; c++) cells.push(`M${fix(-w / 2 + (w * c) / cols)} ${-d / 2}v${d}`);
+      for (let r = 1; r < rows; r++) cells.push(`M${-w / 2} ${fix(-d / 2 + (d * r) / rows)}h${w}`);
+      kids.push(sv('g', {
+        class: `p-panel${isSel('panel', i) ? ' sel' : ''}${energyOpen ? ' live' : ''}`, 'data-kind': 'panel', 'data-index': i,
+        transform: `translate(${p.pos[0]} ${p.pos[1]}) rotate(${-(p.rot || 0)})`,
+      }, sv('rect', { x: -w / 2, y: -d / 2, width: w, height: d, rx: 0.04 }),
+        cells.length ? sv('path', { d: cells.join(''), class: 'cells' }) : null,
+        // the low edge, which they face
+        sv('path', { d: `M${-w / 4} ${d / 2}H${w / 4}`, class: 'front' })));
+    });
+
     doc.openings.forEach((o, i) => {
       if (big) kids.push(sv('line', { class: 'p-hit', 'data-kind': 'opening', 'data-index': i, x1: o.from[0], y1: o.from[1], x2: o.to[0], y2: o.to[1] }));
       kids.push(sv('line', {
@@ -686,6 +776,16 @@ export async function bootEditor(root) {
         sv('rect', { x: -0.47, y: 0.08, width: 0.94, height: 0.24, rx: 0.07 }),
         sv('path', { d: 'M-0.3 0.42v0.22M0 0.42v0.3M0.3 0.42v0.22', class: 'flow' })));
     });
+
+    const battery = doc.energy?.battery;
+    if (Array.isArray(battery?.pos)) {
+      kids.push(sv('g', {
+        class: `p-battery${isSel('battery', 0) ? ' sel' : ''}`, 'data-kind': 'battery', 'data-index': 0,
+        transform: `translate(${battery.pos[0]} ${battery.pos[1]}) rotate(${-(battery.rot || 0)})`,
+      }, big ? sv('circle', { r: 0.5, class: 'hit' }) : null,
+        sv('rect', { x: -0.31, y: -0.12, width: 0.62, height: 0.24, rx: 0.06 }),
+        sv('path', { d: 'M0.04 -0.08L-0.06 0.015H0.04L-0.04 0.085', class: 'bolt' })));
+    }
 
     doc.lights.forEach((l, i) => {
       const g = sv('g', {
@@ -866,7 +966,7 @@ export async function bootEditor(root) {
       return;
     }
     if (!isSel(kind, index)) select({ kind, index });
-    const item = doc[KEYS[kind]][index];
+    const item = listOf(kind)[index];
     drag = { kind, index, start, moved: false };
     if (kind === 'room') {
       const [x, z, w, d] = item.rect;
@@ -938,7 +1038,7 @@ export async function bootEditor(root) {
     if (!drag.moved) { drag.moved = true; snapshot(); haptic('tick'); }
     const item = drag.kind === 'resize' ? doc.rooms[drag.index]
       : HANDLES.has(drag.kind) && drag.kind !== 'aim' ? null : drag.kind === 'aim' ? doc.cameras[drag.index]
-        : drag.kind === 'site' ? doc.site : doc[KEYS[drag.kind]][drag.index];
+        : drag.kind === 'site' ? doc.site : listOf(drag.kind)[drag.index];
 
     if (drag.kind === 'corner') {
       doc.site.boundary[drag.index] = [fix(drag.pos[0] + dx), fix(drag.pos[1] + dz)];
@@ -986,6 +1086,10 @@ export async function bootEditor(root) {
         const room = roomAt(item.pos);
         if (room) item.room = room.id;
         else if (!doc.rooms.some((r) => r.id === OUTSIDE)) item.room = OUTSIDE;
+      } else if (drag.kind === 'battery') {
+        // Out of every room it stands outside.
+        const room = roomAt(item.pos);
+        if (room) item.room = room.id; else delete item.room;
       }
     }
     touch();
@@ -1047,7 +1151,7 @@ export async function bootEditor(root) {
 
   function renderInspector() {
     const kind = sel.kind;
-    const item = sel.index != null ? doc[KEYS[kind]]?.[sel.index] : null;
+    const item = sel.index != null ? listOf(kind)?.[sel.index] : null;
     const nodes = [];
     const head = (title, sub) => nodes.push(isPhone
       ? h('div.insp-head', h('div.insp-titles', h('h2', title), sub ? h('span', sub) : null), phone.headActions())
@@ -1139,6 +1243,34 @@ export async function bootEditor(root) {
         section('How it is worked out',
           h('p.note', 'A spot counts as seen when a camera has a clear line to the middle of a person standing there: walls, fences, hedges, sheds and cars block it, a gate’s bars and the space under a tree’s crown do not. Detail follows the pixels the camera puts on a metre there (IEC 62676-4): 25 to detect, 62.5 to observe, 125 to recognise, 250 to identify.')));
       }
+    } else if (kind === 'energy') {
+      head('Solar & battery', 'Panels on the roof, a home battery and the power flow between them');
+      // Kept apart from the plan until something is put in it.
+      const e = doc.energy || {};
+      const panels = e.panels || [];
+      const energyHooks = { snapshot: () => snapshot(), changed: () => { doc.energy = e; tidyEnergy(); touch(); } };
+      nodes.push(section('Solar panels',
+        panels.length
+          ? panels.map((p, i) => h('button.row.home-row', { onclick: () => select({ kind: 'panel', index: i }) },
+            icon('sun', 15), h('span.row-name', `Array ${i + 1}`), h('span.row-sub', `${modules(p)} modules · ${fix(p.size[0])} × ${fix(p.size[1])} m`)))
+          : h('p.note', 'Draw where your panels lie on the roof. In 3D they light up with what they make.'),
+        h('button.btn.wide', { onclick: addPanels }, icon('plus', 14, 2.4), panels.length ? 'Add another array' : 'Add panels on the roof')),
+      panels.length ? section('Peak output',
+        bind('Watts (optional)', number(100), {
+          get: () => e.peak ?? '',
+          set: (v) => { if (v === '') delete e.peak; else e.peak = v; },
+          parse: (v) => { const n = optNum(v); return n === '' || n > 0 ? n : undefined; },
+        }),
+        h('p.note', 'The panels look their brightest at this output. Left empty, at the most they have made since the view opened.')) : null,
+      section('Home battery',
+        e.battery
+          ? h('button.row.home-row', { onclick: () => select({ kind: 'battery', index: 0 }) },
+            icon('power', 15), h('span.row-name', 'Battery'), h('span.row-sub', e.battery.room ? roomName(e.battery.room) : 'outside'))
+          : [h('p.note', 'Put it where it stands. Its front shows how full it is, and whether it is charging.'),
+            h('button.btn.wide', { onclick: addBattery }, icon('plus', 14, 2.4), 'Add a battery')]),
+      links.energySection(e, energyHooks),
+      section('How it works',
+        h('p.note', 'Lines in the 3D view carry the power from the panels to the house and the battery, from the battery to the house, and between the house and the grid: thicker and faster the more watts flow. Until a sensor is linked the flow is made up, a sunny day in six minutes.')));
     } else if (!item) {
       head('Nothing selected');
       if (isPhone) nodes.push(h('p.note', 'Tap a room, a lamp or anything else on the plan.'));
@@ -1192,6 +1324,27 @@ export async function bootEditor(root) {
         h('p.note', 'Dragging the unit on the plan snaps it to the nearest wall of its room.')),
       links.deviceSection(item, 'ac', linkHooks),
       links.sensorSection(item, linkHooks));
+    } else if (kind === 'panel') {
+      head(`Solar panels · array ${sel.index + 1}`, `${modules(item)} modules on the roof`);
+      const positive = (v) => { const n = parseNum(v); return n > 0 ? n : undefined; };
+      nodes.push(h('button.back-link', { onclick: () => select({ kind: 'energy' }) }, icon('back', 14, 2.2), 'Solar & battery'),
+        section('Where they lie, m',
+          row(bind('X', number(), { ...at(item, 'pos', 0), parse: parseNum }), bind('Z', number(), { ...at(item, 'pos', 1), parse: parseNum })),
+          row(bind('Width', number(0.1), { ...at(item, 'size', 0), parse: positive }), bind('Depth', number(0.1), { ...at(item, 'size', 1), parse: positive })),
+          bind('Facing, °', number(15), { ...prop(item, 'rot', 0), parse: parseNum }),
+          h('p.note', 'Width across, depth up the slope: a module is about 1 × 1.7 m. They face the way the short line on the plan marks their low edge: 0° south (down the plan), 90° east.')),
+        h('button.btn.wide.danger', { onclick: () => remove('panel', sel.index) }, icon('trash', 14, 2), 'Remove these panels'));
+    } else if (kind === 'battery') {
+      head('Home battery', item.room ? roomName(item.room) : 'Outside the house');
+      nodes.push(h('button.back-link', { onclick: () => select({ kind: 'energy' }) }, icon('back', 14, 2.2), 'Solar & battery'),
+        section('Battery',
+          bind('Stands in', choice([...doc.rooms.map((r) => [r.id, r.name || r.id]), ['', 'Outside the house']]), {
+            get: () => item.room || '', set: (v) => { if (v) item.room = v; else delete item.room; }, event: 'change',
+          }),
+          row(bind('X', number(), { ...at(item, 'pos', 0), parse: parseNum }), bind('Z', number(), { ...at(item, 'pos', 1), parse: parseNum })),
+          bind('Facing, °', number(15), { ...prop(item, 'rot', 0), parse: parseNum }),
+          h('p.note', 'Its front shows the charge: 0° faces south (down the plan), 90° east. Outside the house it shows in the view from outside.')),
+        h('button.btn.wide.danger', { onclick: () => remove('battery', 0) }, icon('trash', 14, 2), 'Remove the battery'));
     } else if (kind === 'camera') {
       head(item.name || item.id, `id: ${item.id}`);
       nodes.push(section('Security camera',
@@ -1578,7 +1731,8 @@ export async function bootEditor(root) {
       ev.preventDefault();
       remove(sel.kind, sel.index);
     } else if (ev.key.startsWith('Arrow') && !typing && sel.index != null) {
-      const item = doc[KEYS[sel.kind]][sel.index];
+      const item = listOf(sel.kind)?.[sel.index];
+      if (!item) return;
       const targets = [item.pos || item.rect || item.from, item.from ? item.to : null].filter(Boolean);
       if (!targets.length) return;
       ev.preventDefault();
@@ -1627,7 +1781,7 @@ export async function bootEditor(root) {
       ['room', 'home', 'Room'], ['light', 'bulb', 'Lamp'], ['ac', 'ac', 'Air conditioner'],
       ['opening', 'opening', 'Door or window'], ['furniture', 'furniture', 'Furniture'], ['scene', 'sparkles', 'Scene'],
       ['camera', 'cctv', 'Security camera'], ['outdoor', 'trees', 'Fence, tree…'], ['site', 'fence', 'Property line'],
-      ['outdoorLight', 'lantern', 'Outdoor light'],
+      ['outdoorLight', 'lantern', 'Outdoor light'], ['panel', 'sun', 'Solar panels'], ['battery', 'power', 'Home battery'],
     ];
     addSheet.append(h('div.p-modal-head', h('b', 'Add to the plan'), h('button.p-text', { onclick: closeModals }, 'Cancel')),
       h('div.p-add-grid', addables.map(([kind, name, label]) => h('button.p-add-item', {
@@ -1893,7 +2047,7 @@ export async function bootEditor(root) {
     planView = null; // a new plan: show all of it
     for (const key of Object.values(KEYS)) doc[key] ||= [];
     nameInput.value = doc.name || 'Home';
-    if (sel.index != null && !doc[KEYS[sel.kind]]?.[sel.index]) sel = { kind: 'home' };
+    if (sel.index != null && !listOf(sel.kind)?.[sel.index]) sel = { kind: 'home' };
     touch();
     dirty = false;
     validate();

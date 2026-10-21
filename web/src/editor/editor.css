@@ -129,6 +129,21 @@ html.native:not(.ios) .bar { padding-top: var(--title-bar); }
 
 .p-handle { fill: #6aa6ff; stroke: #fff; stroke-width: 0.05; cursor: nwse-resize; }
 
+/* solar panels on the roof (picked up only while the energy section is open) and the battery */
+.p-panel { pointer-events: none; }
+.p-panel.live { pointer-events: auto; cursor: move; }
+.p-panel rect { fill: rgba(70, 120, 230, 0.16); stroke: rgba(150, 190, 255, 0.45); stroke-width: 0.03; }
+.p-panel .cells { stroke: rgba(150, 190, 255, 0.3); stroke-width: 0.02; fill: none; }
+.p-panel .front { stroke: rgba(150, 190, 255, 0.7); stroke-width: 0.05; stroke-linecap: round; fill: none; }
+.p-panel.live rect { fill: rgba(70, 120, 230, 0.34); stroke: rgba(170, 205, 255, 0.85); }
+.p-panel.live:hover rect { fill: rgba(70, 120, 230, 0.46); }
+.p-panel.sel rect { stroke: #fff; stroke-width: 0.06; }
+.p-battery { cursor: move; }
+.p-battery rect { fill: #4fe0b0; stroke: #0a0e1a; stroke-width: 0.04; }
+.p-battery .bolt { fill: none; stroke: #0a0e1a; stroke-width: 0.035; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
+.p-battery.sel rect { stroke: #fff; stroke-width: 0.07; }
+.btn.danger { color: #ff8a80; }
+
 /* ---------- right column ---------- */
 
 .right { grid-area: right; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); }

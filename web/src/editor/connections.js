@@ -1,10 +1,11 @@
 // The editor's "Connections": the smart home platforms House Control can link the plan's
 // lamps and ACs to (Smart Life, Home Assistant, Philips Hue, Apple Home), the screens that
-// connect each one, and the pickers that link a lamp or an AC to one of their devices.
+// connect each one, and the pickers that link a lamp, an AC or an energy sensor to one of
+// their devices.
 import { h } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
 import { isNative, call } from '../bridge.js';
-import { SERVICES, linkOf } from '../config.js';
+import { SERVICES, ENERGY_ROLES, linkOf } from '../config.js';
 
 const ORDER = ['smartlife', 'homeassistant', 'hue', 'homekit'];
 const LOOK = {
@@ -13,7 +14,9 @@ const LOOK = {
   hue: { icon: 'bulb', tint: '#c38bff', blurb: 'A Hue Bridge on this network. No account needed' },
   homekit: { icon: 'home', tint: '#ffb340', blurb: 'HomeKit and Matter accessories, through your iPhone' },
 };
-const KIND_TITLES = { light: 'Lights and plugs', ac: 'Air conditioners', sensor: 'Temperature sensors' };
+const KIND_TITLES = {
+  light: 'Lights and plugs', ac: 'Air conditioners', sensor: 'Temperature sensors', power: 'Power sensors', battery: 'Battery levels',
+};
 
 export function createConnections({ rerender, toast, usedBy, onOpen }) {
   const boot = window.__HOUSE_BOOT__ || {};
@@ -106,9 +109,9 @@ export function createConnections({ rerender, toast, usedBy, onOpen }) {
     if (state.errors[id]) return h('p.note.bad', state.errors[id]);
     const list = devicesOf(id);
     if (!state.devices) return null;
-    if (!list.length) return h('p.note', 'Connected, but no lamps, air conditioners or temperature sensors were found.');
+    if (!list.length) return h('p.note', 'Connected, but no lamps, air conditioners or sensors were found.');
     const used = usedBy();
-    const groups = ['light', 'ac', 'sensor'].map((kind) => [kind, list.filter((d) => d.kind === kind)]).filter(([, l]) => l.length);
+    const groups = Object.keys(KIND_TITLES).map((kind) => [kind, list.filter((d) => d.kind === kind)]).filter(([, l]) => l.length);
     return h('div.devices-list', groups.map(([kind, items]) => [
       h('h3', `${KIND_TITLES[kind]} · ${items.length}`),
       items.map((d) => h('div.device',
@@ -192,7 +195,7 @@ export function createConnections({ rerender, toast, usedBy, onOpen }) {
           h('li', 'Under “Long-lived access tokens” press Create token, name it “House Control”, copy it here.')),
         button,
         ha.error ? h('p.note.bad', ha.error) : null,
-        h('p.note', 'The token stays on this Mac (and goes to the iPhones you paired, over their encrypted link). Lights, switches, climate devices and temperature sensors appear here.')),
+        h('p.note', 'The token stays on this Mac (and goes to the iPhones you paired, over their encrypted link). Lights, switches, climate devices, and temperature, power and battery sensors appear here.')),
     ];
   }
 
@@ -306,9 +309,9 @@ export function createConnections({ rerender, toast, usedBy, onOpen }) {
     return `${d.name}${d.room ? ` — ${d.room}` : ''}${d.online ? '' : ' (offline)'}`;
   }
 
-  function picker(kind, current, include = () => true) {
+  function picker(kind, current, include = () => true, none = kind === 'sensor' ? 'None — estimated' : 'Not linked — simulated') {
     const select = h('select');
-    select.append(h('option', { value: '' }, kind === 'sensor' ? 'None — estimated' : 'Not linked — simulated'));
+    select.append(h('option', { value: '' }, none));
     let found = false;
     for (const id of offered()) {
       const list = devicesOf(id).filter((d) => d.kind === kind && include(d));
@@ -393,6 +396,44 @@ export function createConnections({ rerender, toast, usedBy, onOpen }) {
       h('p.note', 'A temperature sensor in the same room. Without one, the AC’s own reading is used, or the temperature is estimated.'));
   }
 
+  /** The sensors of the energy section: one per role, and which way a signed one counts. */
+  function energySection(energy, { snapshot, changed }) {
+    if (!anyConnected()) {
+      return section('Sensors',
+        h('p.note', 'Simulated: a made-up day of sun. Connect Home Assistant to show your own panels, battery and grid.'),
+        h('button.btn.wide', { onclick: () => onOpen(null) }, icon('link', 14), 'Open Connections'));
+    }
+    if (!state.devices && !state.loading) setTimeout(() => load({ quiet: true }), 0);
+    const sensors = energy.sensors || {};
+    const set = (role, next) => {
+      snapshot();
+      energy.sensors = { ...sensors };
+      if (next) energy.sensors[role] = next; else delete energy.sensors[role];
+      if (!Object.keys(energy.sensors).length) delete energy.sensors;
+      changed();
+    };
+    const rows = Object.entries(ENERGY_ROLES).map(([role, { name, kind, signed }]) => {
+      const current = sensors[role];
+      const select = picker(kind, current?.id ? `${current.service}|${current.id}` : '', () => true, 'None');
+      select.addEventListener('change', () => {
+        const [service, id] = select.value ? select.value.split('|') : [];
+        set(role, service ? { service, id, ...(current?.invert ? { invert: true } : {}) } : null);
+      });
+      const field = h('label.field', h('span', name), select);
+      if (!signed || !current?.id) return field;
+      const invert = h('input', { type: 'checkbox' });
+      invert.checked = Boolean(current.invert);
+      invert.addEventListener('change', () => {
+        const { invert: _, ...link } = current;
+        set(role, invert.checked ? { ...link, invert: true } : link);
+      });
+      return [field, h('div.checks', h('label.field', h('span', role === 'grid' ? 'Reversed: it counts exporting as positive' : 'Reversed: it counts charging as positive'), invert))];
+    });
+    return section('Sensors', rows,
+      h('p.note', 'Any power sensor in W or kW, and a battery level in %. The grid counts positive while you draw from it, the battery while it discharges; tick “Reversed” when yours count the other way. With Home Assistant’s Fronius integration, enable its “Power grid” and “Power battery” sensors (they are off at first) and leave both unticked.'),
+      Object.keys(state.errors).length ? h('p.note.bad', Object.entries(state.errors).map(([s, e]) => `${SERVICES[s]?.name || s}: ${e}`).join(' · ')) : null);
+  }
+
   /** "id → plan item name" for every device the plan links, to mark them in the lists. */
   function usedMap(doc) {
     const out = new Map();
@@ -402,11 +443,14 @@ export function createConnections({ rerender, toast, usedBy, onOpen }) {
       if (d.sensor?.id) out.set(`${d.sensor.service}|${d.sensor.id}`, `${d.name || d.id} · room`);
       if (d.tuya?.sensorId) out.set(`smartlife|${d.tuya.sensorId}`, `${d.name || d.id} · room`);
     }
+    for (const [role, s] of Object.entries(doc.energy?.sensors || {})) {
+      if (s?.id) out.set(`${s.service}|${s.id}`, ENERGY_ROLES[role]?.name || role);
+    }
     return out;
   }
 
   return {
-    state, load, refreshInfo, sidebarRow, overview, detail, tile, deviceSection, sensorSection, usedMap,
+    state, load, refreshInfo, sidebarRow, overview, detail, tile, deviceSection, sensorSection, energySection, usedMap,
     connected, stopPairing,
     title: (id) => SERVICES[id]?.name,
     blurb: (id) => LOOK[id]?.blurb,
