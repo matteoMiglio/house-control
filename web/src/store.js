@@ -1,4 +1,6 @@
 import { post, call, isNative } from './bridge.js';
+import { ENERGY_ROLES } from './config.js';
+import { energySimulation, stepEnergy } from './energy.js';
 
 const STORAGE_KEY = 'house-control:state:v1';
 
@@ -28,11 +30,36 @@ export function createStore(config) {
   const lightCfg = new Map(config.lights.map((l) => [l.id, l]));
   const acCfg = new Map(config.acs.map((a) => [a.id, a]));
 
-  const state = { lights: {}, acs: {}, scene: null };
+  // `energy`: the power flow of the plan's energy section (energy.js), as its sensors report it
+  // or simulated. Shown, never saved or sent anywhere.
+  const state = { lights: {}, acs: {}, scene: null, energy: {} };
   for (const l of config.lights) state.lights[l.id] = defaultLight(l);
   for (const a of config.acs) state.acs[a.id] = defaultAC(a, config.outdoorTemp);
   // What each real AC can do, as reported by the native side. A simulated AC can do everything.
   const features = {};
+
+  // Takes a new reading of the energy sensors; a role reported as null is not known any more.
+  // Returns whether anything changed.
+  function takeEnergy(next) {
+    if (!next) return false;
+    let any = false;
+    for (const role of Object.keys(ENERGY_ROLES)) {
+      if (!(role in next)) continue;
+      const v = Number.isFinite(next[role]) ? next[role] : null;
+      if (state.energy[role] !== v) { state.energy[role] = v; any = true; }
+    }
+    return any;
+  }
+  // Without sensors the power flow is simulated (in the Mac app, the app does that).
+  const energySim = nativeState ? null : energySimulation(config.energy);
+  let energyAt = 0;
+  function simulateEnergy() {
+    const now = Date.now() / 1000;
+    const seconds = energyAt ? Math.min(60, now - energyAt) : 0;
+    energyAt = now;
+    return takeEnergy(stepEnergy(energySim, now, seconds));
+  }
+  if (energySim) simulateEnergy();
 
   const take = (saved) => {
     for (const [id, s] of Object.entries(saved.lights || {})) if (state.lights[id]) Object.assign(state.lights[id], s);
@@ -51,7 +78,7 @@ export function createStore(config) {
     }
   } catch { /* storage unavailable: start from defaults */ }
   const booted = nativeState && window.__HOUSE_BOOT__?.state;
-  if (booted) { take(booted); restored = true; }
+  if (booted) { take(booted); takeEnergy(booted.energy); restored = true; }
   // The last intent sent to the app, and the last one its state took in (see sync).
   let sent = 0;
 
@@ -61,7 +88,8 @@ export function createStore(config) {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ home: config.name, ...state, features }));
+        const { energy, ...kept } = state;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ home: config.name, ...kept, features }));
       } catch { /* ignore */ }
     }, 200);
   }
@@ -278,7 +306,10 @@ export function createStore(config) {
       }
       const scene = next.scene ?? null;
       if (scene !== state.scene) { state.scene = scene; any = true; }
+      // New energy readings alone move the 3D view, like a simulated room temperature.
+      const energy = takeEnergy(next.energy);
       if (any) emit(tick ? { type: 'tick' } : { type: 'bulk', remote: true, adopted: true, source });
+      else if (energy) emit({ type: 'tick' });
     },
 
     // State reported by real devices (native provider). Never echoed back as a command.
@@ -291,7 +322,9 @@ export function createStore(config) {
         features[id] = f;
         any = true;
       }
+      const energy = takeEnergy(update.energy);
       if (any) emit({ type: 'bulk', remote: true });
+      else if (energy) emit({ type: 'tick' });
     },
   };
 
@@ -309,7 +342,9 @@ export function createStore(config) {
       const next = Math.abs(goal - a.roomTemp) <= step ? goal : a.roomTemp + Math.sign(goal - a.roomTemp) * step;
       if (next !== a.roomTemp) { a.roomTemp = Math.round(next * 10) / 10; any = true; }
     }
-    if (any) { for (const fn of listeners) fn({ type: 'tick' }); persist(); }
+    if (any) persist();
+    if (energySim && simulateEnergy()) any = true;
+    if (any) for (const fn of listeners) fn({ type: 'tick' });
   }, 3000);
 
   return store;
