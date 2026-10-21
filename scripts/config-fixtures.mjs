@@ -14,6 +14,7 @@ for (const plan of ['home', 'studio']) {
     lights: c.lights.map((l) => ({ id: l.id, name: l.name, room: l.room, type: l.type, capabilities: l.capabilities, icon: lampIcon(l) })),
     acs: c.acs.map((a) => ({ id: a.id, name: a.name, room: a.room, min: a.min, max: a.max })),
     scenes: c.scenes.map((s) => ({ id: s.id, name: s.name, icon: s.icon })),
+    energy: c.energy && { panels: c.energy.panels.length, battery: Boolean(c.energy.battery), peak: c.energy.peak, sensors: c.energy.sensors },
   };
   writeFileSync(`${root}core/Tests/HomeStoreTests/Fixtures/${plan}.json`, `${JSON.stringify(out, null, 2)}\n`);
   console.log(plan, out.groups.length, 'groups', out.lights.length, 'lights');

@@ -33,6 +33,32 @@ struct HomeConfigTests {
         let scenes = web["scenes"] as? [[String: Any]] ?? []
         #expect(config.scenes.map(\.icon) == scenes.map { $0["icon"] as! String })
         #expect(config.scenes.map(\.name) == scenes.map { $0["name"] as! String })
+        let energy = web["energy"] as? [String: Any]
+        #expect((config.energy == nil) == (energy == nil))
+        if let energy, let mine = config.energy {
+            #expect(mine.panels == energy["panels"] as? Int)
+            #expect(mine.battery == energy["battery"] as? Bool)
+            #expect(mine.peak == (energy["peak"] as? NSNumber)?.doubleValue)
+            let sensors = energy["sensors"] as? [String: [String: Any]] ?? [:]
+            #expect(mine.sensors.keys.map(\.rawValue).sorted() == sensors.keys.sorted())
+            for (role, sensor) in mine.sensors {
+                #expect(sensor.id == sensors[role.rawValue]?["id"] as? String)
+                #expect(sensor.invert == sensors[role.rawValue]?["invert"] as? Bool)
+            }
+        }
+    }
+
+    @Test func theEnergySectionReadsLikeTheWeb() {
+        let config = HomeConfig(plan: ["energy": [
+            "panels": [["pos": [1, 1], "size": [2, 2]]],
+            "sensors": ["grid": ["service": "homeassistant", "id": "sensor.grid", "invert": true],
+                        "load": ["service": "homeassistant", "id": ""]],
+        ]])
+        #expect(config.energy?.panels == 1)
+        #expect(config.energy?.battery == false)
+        #expect(config.energy?.sensors == [.grid: .init(service: "homeassistant", id: "sensor.grid", invert: true)])
+        #expect(config.energy?.simulated == false)
+        #expect(HomeConfig(plan: ["energy": ["battery": ["pos": [1, 1]]]]).energy?.simulated == true)
     }
 
     @Test func aRoomCalledOutsideIsNotTheOutsideGroup() {

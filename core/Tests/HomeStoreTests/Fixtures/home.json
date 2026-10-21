@@ -220,5 +220,6 @@
       "name": "Away",
       "icon": "door"
     }
-  ]
+  ],
+  "energy": null
 }

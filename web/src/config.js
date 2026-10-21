@@ -61,6 +61,19 @@ export function treeShape(o) {
 export const outdoorShape = (type) => (OUTDOOR_LINES.includes(type) ? 'line' : type === 'tree' ? 'point'
   : VEHICLE_SIZE[type] ? 'vehicle' : 'rect');
 export const GROUND_KINDS = ['grass', 'gravel', 'concrete'];
+
+// The energy section's sensors, by what they report (EnergyRole in core/…/Energy.swift), and
+// the kind of device each one takes. `signed`: the sensor's sign says which way the power
+// flows, and platforms disagree about it, so the plan can say `invert`.
+export const ENERGY_ROLES = {
+  solar: { name: 'Solar production', kind: 'power' },
+  grid: { name: 'Grid', kind: 'power', signed: true },
+  load: { name: 'House consumption', kind: 'power' },
+  battery: { name: 'Battery power', kind: 'power', signed: true },
+  charge: { name: 'Battery charge', kind: 'battery' },
+};
+// One module of a panel array, in metres: across, and up the slope.
+export const PANEL_MODULE = [1.0, 1.7];
 // A camera's sensor when the plan does not say: 2K at 16:9.
 export const CAMERA_RESOLUTION = [2560, 1440];
 
@@ -193,6 +206,8 @@ export function normalize(raw) {
     return cam;
   });
 
+  const energy = raw.energy == null ? null : normalizeEnergy(raw.energy, roomIds);
+
   const minX = Math.min(...rooms.map((r) => r.x));
   const minZ = Math.min(...rooms.map((r) => r.z));
   const maxX = Math.max(...rooms.map((r) => r.x + r.w));
@@ -210,6 +225,7 @@ export function normalize(raw) {
     else { take(o.rect); take([o.rect[0] + o.rect[2], o.rect[1] + o.rect[3]]); }
   }
   for (const c of cameras) take(c.pos);
+  if (energy?.battery) take(energy.battery.pos);
   if (outsideIsArea) for (const l of lights) if (l.room === OUTSIDE) take(l.pos);
 
   return {
@@ -233,7 +249,44 @@ export function normalize(raw) {
     site,
     outdoor,
     cameras,
+    energy,
     bounds: { minX, minZ, maxX, maxZ },
     siteBounds: { minX: Math.min(...xs), minZ: Math.min(...zs), maxX: Math.max(...xs), maxZ: Math.max(...zs) },
   };
+}
+
+// Solar panels on the roof, a home battery, and the sensors that report the power flow. Every
+// part is optional: panels without a battery, a battery and a grid meter without panels…
+function normalizeEnergy(e, roomIds) {
+  const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  need(isObject(e), 'The energy section ("energy") must be an object');
+  need(e.panels == null || Array.isArray(e.panels), '"energy.panels" must be a list of panel arrays');
+  const panels = (e.panels || []).map((p, i) => {
+    const where = `Solar panel array #${i + 1}`;
+    need(isPoint(p?.pos), `${where} needs "pos": [x, z]`);
+    need(isPoint(p.size) && p.size[0] > 0 && p.size[1] > 0, `${where} needs "size": [width, depth] in metres above 0`);
+    need(p.rot == null || Number.isFinite(p.rot), `${where} has a "rot" that is not a number`);
+    return { pos: p.pos, size: p.size, rot: p.rot || 0 };
+  });
+
+  let battery = null;
+  if (e.battery != null) {
+    const b = e.battery;
+    need(isObject(b) && isPoint(b.pos), 'The battery ("energy.battery") needs "pos": [x, z]');
+    need(b.room == null || roomIds.has(b.room), `The battery refers to unknown room "${b.room}" (leave "room" out for one outside)`);
+    need(b.rot == null || Number.isFinite(b.rot), 'The battery has a "rot" that is not a number');
+    battery = { pos: b.pos, room: b.room ?? null, rot: b.rot || 0 };
+  }
+
+  need(e.sensors == null || isObject(e.sensors), '"energy.sensors" must be an object: role → { service, id }');
+  const sensors = {};
+  for (const [role, s] of Object.entries(e.sensors || {})) {
+    need(role in ENERGY_ROLES, `Energy sensor "${role}" is not one of ${Object.keys(ENERGY_ROLES).join(', ')}`);
+    need(isObject(s) && typeof s.service === 'string' && typeof s.id === 'string', `Energy sensor "${role}" needs "service" and "id"`);
+    need(s.invert == null || typeof s.invert === 'boolean', `Energy sensor "${role}" has an "invert" that is not true or false`);
+    if (s.service && s.id) sensors[role] = { service: s.service, id: s.id, invert: Boolean(s.invert) };
+  }
+
+  need(e.peak == null || (Number.isFinite(e.peak) && e.peak > 0), 'The panels\' peak ("energy.peak") must be a power in W above 0');
+  return { panels, battery, sensors, peak: e.peak ?? null };
 }
