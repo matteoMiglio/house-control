@@ -18,6 +18,11 @@ What changed in each release of House Control. The Mac app is on
   battery (charging, discharging or idle), updated live. In 3D, pointing at the panels (from outside) or the
   battery shows what they make or hold, and a click opens the same sheet. A home without panels or without a battery shows what it
   has, and a reading that is not known shows as a dash.
+- **In the island:** a **Solar** chip with the same numbers (a click opens the sheet in the window), and at rest,
+  while the panels make power and no AC is running, the production beside the notch (`☀ 3.2 kW`). It never
+  displaces a running AC, never shows at night, and never brings the tab out on a display without a notch.
+  **Settings → Beside the notch** chooses: Auto (that), AC (never the sun) or Solar (the sun first, even over a
+  running AC, and the AC again at night).
 - **From any Home Assistant integration:** power sensors in W or kW and battery levels are listed in Connections
   (Mac and iPhone), and **Edit Home → Solar & battery** places the panels and the battery and links a sensor to
   each role: solar production, grid, house consumption, battery power and charge, with **Reversed** for a sensor

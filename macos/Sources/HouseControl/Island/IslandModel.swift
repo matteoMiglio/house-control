@@ -30,6 +30,8 @@ final class IslandModel {
     var notchWidth: CGFloat = 190
     var notchHeight: CGFloat = 34
     var realNotch = false
+    /// What the right ear shows at rest, AC or sun (Settings).
+    var earChoice: IslandEar.Choice = .auto
 
     /// The 3D model shows: once the opening shape has grown around it (it would show outside).
     private(set) var revealed = false
@@ -39,6 +41,8 @@ final class IslandModel {
     @ObservationIgnored var onMenu: (() -> Void)?
     /// A chip toggled a lamp: the lamp in the island's model nods.
     @ObservationIgnored var onBump: ((String) -> Void)?
+    /// A chip asks for a device's sheet (the Solar chip: "energy"), in the panel or the window.
+    @ObservationIgnored var onOpen: ((String) -> Void)?
     @ObservationIgnored private var before: Snapshot?
     @ObservationIgnored private var revealTimer: Task<Void, Never>?
     /// How long the opening spring takes to cover the model's place.
@@ -131,6 +135,21 @@ final class IslandModel {
             return news("home", on > 0 ? "#ffb46b" : "#8fa3c7", config.name, on > 0 ? "\(on) on" : "All off")
         }
         return nil
+    }
+
+    // MARK: - At rest
+
+    /// The right ear at rest: a running AC or the panels' production, as `earChoice` says. The
+    /// sun never brings the island out on its own (see `quiet` in IslandSurface).
+    var rightEar: IslandEar? {
+        IslandEar.resting(earChoice, acRunning: home.firstACOn != nil, production: home.config.energy?.production(home.energy))
+    }
+
+    /// How far the ears reach beside the notch at rest: a little further while they show the
+    /// production, which is longer than an AC's "23°".
+    var restingEar: CGFloat {
+        if case .solar? = rightEar { return 84 }
+        return 64
     }
 
     // MARK: - Mood

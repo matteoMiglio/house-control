@@ -126,6 +126,33 @@ struct HomeConfigTests {
         #expect(full.consumption(EnergyState(grid: 9, load: 640)) == 640)
     }
 
+    @Test func theIslandShowsProductionOnlyWhileThereIsSome() {
+        let panels = HomeConfig(plan: ["energy": ["panels": [["pos": [3, 2], "size": [4, 3.4]]]]]).energy!
+        let batteryOnly = HomeConfig(plan: ["energy": ["battery": ["pos": [1, 1]]]]).energy!
+        #expect(panels.production(EnergyState(solar: 3245)) == "3.2 kW")
+        #expect(panels.production(EnergyState(solar: 640)) == "640 W")
+        #expect(panels.production(EnergyState(solar: 0)) == nil) // night
+        #expect(panels.production(EnergyState(solar: EnergyState.idleWatts - 1)) == nil)
+        #expect(panels.production(EnergyState()) == nil) // not known
+        #expect(batteryOnly.production(EnergyState(solar: 3000)) == nil)
+    }
+
+    @Test func theIslandsRightEarFollowsTheSetting() {
+        let sun = IslandEar.solar("3.2 kW")
+        // Auto: a running AC first, then the sun.
+        #expect(IslandEar.resting(.auto, acRunning: true, production: "3.2 kW") == .ac)
+        #expect(IslandEar.resting(.auto, acRunning: false, production: "3.2 kW") == sun)
+        #expect(IslandEar.resting(.auto, acRunning: false, production: nil) == nil)
+        // AC: never the sun.
+        #expect(IslandEar.resting(.ac, acRunning: true, production: "3.2 kW") == .ac)
+        #expect(IslandEar.resting(.ac, acRunning: false, production: "3.2 kW") == nil)
+        // Solar: the sun even over a running AC, the AC at night.
+        #expect(IslandEar.resting(.solar, acRunning: true, production: "3.2 kW") == sun)
+        #expect(IslandEar.resting(.solar, acRunning: true, production: nil) == .ac)
+        #expect(IslandEar.resting(.solar, acRunning: false, production: nil) == nil)
+        #expect(IslandEar.Choice(rawValue: "solar") == .solar && IslandEar.Choice(rawValue: "sun") == nil)
+    }
+
     @Test func noPanelsMakeNoSunWhateverThePeak() {
         var sim = EnergySimulation(peak: 5000, area: 0, battery: true)
         #expect(sim.step(at: EnergySimulation.day / 2, seconds: 3).solar == 0)

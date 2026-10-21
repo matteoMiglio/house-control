@@ -127,8 +127,8 @@ final class IslandController: NSObject {
                               width: Self.open.width + 28, height: notch.height + Self.open.height + 18 + 2)
             schedule(zone.contains(point) ? nil : false, after: 0.32)
         } else {
-            // At rest the ears reach 64 pt beside the notch; while peeking, 132.
-            let zone = notch.insetBy(dx: model.phase == .peek ? -132 : -64, dy: 0).offsetBy(dx: 0, dy: 1)
+            // At rest the ears reach 64 pt beside the notch (84 with the production); while peeking, 132.
+            let zone = notch.insetBy(dx: model.phase == .peek ? -132 : -model.restingEar, dy: 0).offsetBy(dx: 0, dy: 1)
             schedule(zone.contains(point) ? true : nil, after: 0.09)
         }
     }

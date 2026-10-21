@@ -165,10 +165,11 @@ A black tab grows out of the MacBook's notch. On a display without a notch it is
 
 | Do this | To get this |
 | --- | --- |
-| Look at it | How many lights are on, and the target of a running AC |
+| Look at it | How many lights are on, and the target of a running AC — or, with none running, what the solar panels make while the sun is out (**Settings → Beside the notch**: Auto, AC or Solar, which puts the sun first) |
 | Rest the pointer on it | It springs open: the 3D model, scenes, air conditioners and lights |
 | Click a lamp in the model, or its chip | Toggle it; drag across a chip to dim |
 | Click a room in the model | Zoom in on it |
+| Click the **Solar** chip | The Solar sheet, in the window |
 | Move the pointer away | It closes |
 
 When something changes elsewhere — a scene picked in the panel, a lamp switched from the phone — the island
@@ -412,6 +413,7 @@ Environment variables understood by the app:
 | `HOUSE_OPEN_SETTINGS=1` | Open the window on Settings at launch |
 | `HOUSE_ISLAND=0` | Run without the island (`1` forces it on) |
 | `HOUSE_ISLAND_EXPANDED=1` | Keep the island open |
+| `HOUSE_ISLAND_EAR=auto` | What the closed island shows beside the notch for one run: `auto`, `ac` or `solar` |
 | `HOUSE_OPEN_PAIRING=1` | Open the window on Pair iPhone at launch |
 | `HOUSE_COMPUTER_NAME="Studio Mac"` | The name paired iPhones see, instead of the Mac's own (screenshots) |
 | `HOUSE_SNAPSHOT_DIR=/some/folder` | Write `panel.png`, `island.png` and `main.png` (the window) there a few seconds after launch |

@@ -73,6 +73,8 @@ final class AppModel: NSObject {
     var loginState: LoginItem.State = .off
     var connectedDevices: [String] = []
     var islandShown = false
+    /// What the closed island's right ear shows: Auto, AC or Solar (Settings).
+    var islandEar = AppModel.storedIslandEar
     /// The main window's sidebar: which screen it shows, and whether it is shown at all (left as
     /// the user leaves it, with the toolbar's sidebar button).
     var section: MainSection = .home
@@ -245,7 +247,12 @@ final class AppModel: NSObject {
     /// `housecontrol://open[?device=…]`: a click on a widget opens the panel (on that lamp, AC or room).
     func open(urls: [URL]) {
         guard let url = urls.first, url.scheme == SyncPairing.scheme, url.host == "open" else { return }
-        let device = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "device" })?.value
+        show(device: URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "device" })?.value)
+    }
+
+    /// The panel (the window, when the island stands in for the menu bar icon), on a device's
+    /// sheet or a room (`HomeModel.open(device:)`).
+    func show(device: String?) {
         router.whenReady { [weak self] in
             guard let self else { return }
             if !self.panel.isVisible { self.router.show(.panel) }
@@ -524,8 +531,10 @@ final class AppModel: NSObject {
             }
             host.onMessage = { [weak self, unowned host] message in self?.handle(message, from: host) }
             let islandModel = IslandModel(home: home)
+            islandModel.earChoice = islandEar
             islandModel.onBump = { [weak self] id in self?.hosts[.island]?.call("bump", id) }
             islandModel.onMenu = { [weak self] in self?.appMenu().popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil) }
+            islandModel.onOpen = { [weak self] device in self?.show(device: device) }
             self.islandModel = islandModel
             let controller = IslandController(host: host, model: islandModel)
             controller.onExpandedChange = { [weak self] open in self?.setPolling(open) }
@@ -545,6 +554,19 @@ final class AppModel: NSObject {
         if show { showIsland() } else { island?.hide() }
         islandShown = island?.isShown == true
         updateStatusItem()
+    }
+
+    /// Auto unless chosen in Settings (or by HOUSE_ISLAND_EAR=auto|ac|solar for one run).
+    private static var storedIslandEar: IslandEar.Choice {
+        let raw = ProcessInfo.processInfo.environment["HOUSE_ISLAND_EAR"] ?? UserDefaults.standard.string(forKey: "islandEar")
+        return raw.flatMap(IslandEar.Choice.init) ?? .auto
+    }
+
+    func setIslandEar(_ choice: IslandEar.Choice) {
+        // A run with its own data folder (HOUSE_DATA_DIR, for tests) leaves the real setting alone.
+        if ProcessInfo.processInfo.environment["HOUSE_DATA_DIR"] == nil { UserDefaults.standard.set(choice.rawValue, forKey: "islandEar") }
+        islandEar = choice
+        islandModel?.earChoice = choice
     }
 
     // MARK: - Open at Login

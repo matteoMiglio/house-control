@@ -27,6 +27,21 @@ struct MacSettingsView: View {
                             Toggle("Use the island instead of the menu bar icon", isOn: Binding(get: { model.islandShown }, set: { model.setIsland($0) }))
                                 .labelsHidden()
                         }
+                        // Only where there is a choice: the island in use, and panels to read.
+                        if model.islandShown, model.home.config.energy?.hasSolar == true {
+                            Divider().overlay(Theme.line).padding(.leading, 68).padding(.trailing, 18)
+                            SettingsRow(symbol: "sun.max", title: "Beside the notch",
+                                        detail: "What the closed island shows on the right: a running air conditioner first (Auto), only the air conditioner, or what the solar panels make while the sun is out.") {
+                                Picker("Beside the notch", selection: Binding(get: { model.islandEar }, set: { model.setIslandEar($0) })) {
+                                    Text("Auto").tag(IslandEar.Choice.auto)
+                                    Text("AC").tag(IslandEar.Choice.ac)
+                                    Text("Solar").tag(IslandEar.Choice.solar)
+                                }
+                                .pickerStyle(.segmented)
+                                .labelsHidden()
+                                .fixedSize()
+                            }
+                        }
                     }
                 }
 

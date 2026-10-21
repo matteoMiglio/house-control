@@ -72,8 +72,9 @@ private struct IslandShape: View {
             size = CGSize(width: model.notchWidth + ear * 2, height: model.notchHeight)
             radius = 16
         case .collapsed:
-            // Everything off on a display without a notch: nothing to show, so nothing in the menu bar.
-            ear = quiet && !model.realNotch ? 0 : 64
+            // Everything off on a display without a notch: nothing to show, so nothing in the menu bar
+            // (the sun alone does not bring it out there).
+            ear = quiet && !model.realNotch ? 0 : model.restingEar
             size = ear == 0 ? .zero : CGSize(width: model.notchWidth + ear * 2, height: model.notchHeight)
             radius = 13
         }
@@ -120,7 +121,15 @@ private struct IslandShape: View {
         if model.phase == .peek, let news = model.news {
             return EarContent(icon: nil, color: "#ffffff", text: news.detail, strong: true, key: "news-\(news.id)")
         }
-        if let ac { return EarContent(icon: ac.mode, color: PanelColors.modes[ac.mode] ?? "#5db2ff", text: "\(Int(ac.target))°", key: "ac-\(ac.mode)-\(ac.target)") }
+        switch model.rightEar {
+        case .ac?:
+            if let ac { return EarContent(icon: ac.mode, color: PanelColors.modes[ac.mode] ?? "#5db2ff", text: "\(Int(ac.target))°", key: "ac-\(ac.mode)-\(ac.target)") }
+        case .solar(let production)?:
+            // One key: a new reading changes the text, it does not pop in again.
+            if !quiet || model.realNotch { return EarContent(icon: "sun", color: PanelColors.solar, text: production, key: "solar") }
+        case nil:
+            break
+        }
         if quiet, model.realNotch { return EarContent(icon: nil, color: "#ffffff", text: "Off", quiet: true, key: "off") }
         return nil
     }
@@ -398,7 +407,7 @@ private struct SceneFace: View {
     }
 }
 
-/// `.isle-list`: AC chips across, lamp chips two to a row.
+/// `.isle-list`: the Solar chip and the AC chips across, lamp chips two to a row.
 private struct Chips: View {
     let model: IslandModel
     let reduceMotion: Bool
@@ -406,15 +415,20 @@ private struct Chips: View {
     var body: some View {
         let config = model.home.config
         let rows = stride(from: 0, to: config.lights.count, by: 2).map { Array(config.lights[$0..<min($0 + 2, config.lights.count)]) }
+        // First, as in the panel's list.
+        let first = config.energy == nil ? 0 : 1
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 6) {
+                if let energy = config.energy {
+                    EnergyChip(model: model, cfg: energy).reveal(delay: 0.19, reduceMotion: reduceMotion)
+                }
                 ForEach(Array(config.acs.enumerated()), id: \.element.id) { i, ac in
-                    ACChip(model: model, cfg: ac).reveal(delay: 0.19 + Double(min(i, 9)) * 0.024, reduceMotion: reduceMotion)
+                    ACChip(model: model, cfg: ac).reveal(delay: 0.19 + Double(min(first + i, 9)) * 0.024, reduceMotion: reduceMotion)
                 }
                 ForEach(Array(rows.enumerated()), id: \.element.first!.id) { r, row in
                     HStack(spacing: 6) {
                         ForEach(Array(row.enumerated()), id: \.element.id) { c, light in
-                            let i = config.acs.count + r * 2 + c
+                            let i = first + config.acs.count + r * 2 + c
                             LightChip(model: model, cfg: light).reveal(delay: 0.19 + Double(min(i, 9)) * 0.024, reduceMotion: reduceMotion)
                         }
                         if row.count == 1 { Color.clear.frame(maxWidth: .infinity, maxHeight: 1) }
@@ -520,6 +534,40 @@ private struct ACChip: View {
                 .accessibilityLabel("\(cfg.name) power")
             }
         }
+    }
+}
+
+/// Solar production and the battery's charge, read-only, as on the panel's Solar tile; a click
+/// opens its sheet.
+private struct EnergyChip: View {
+    let model: IslandModel
+    let cfg: HomeConfig.Energy
+
+    var body: some View {
+        let s = model.home.energy
+        let on = (s.solar ?? 0) >= EnergyState.idleWatts
+        let rgb = RGB(PanelColors.solar)
+        ChipFace(on: on, color: rgb) {
+            HStack(spacing: 6) {
+                Bubble(icon: cfg.hasSolar ? "sun" : "battery", on: on, color: rgb, ink: Color(red: 36 / 255, green: 21 / 255, blue: 3 / 255))
+                ChipText(name: cfg.name, sub: cfg.status(s), on: on, color: rgb)
+            }
+        }
+        .overlay(alignment: .bottomLeading) {
+            // The battery's charge along the bottom edge, as on the tile.
+            Rectangle().fill(Color(hex: PanelColors.charge(s.charge)))
+                .frame(height: 2.5)
+                .scaleEffect(x: (s.charge ?? 0) / 100, anchor: .leading)
+                .opacity(cfg.hasBattery && s.charge != nil ? 0.9 : 0)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .animation(P.ease(0.26), value: s.charge)
+        }
+        .onTapGesture { model.onOpen?("energy") }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(cfg.name)
+        .accessibilityValue(cfg.status(s))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { model.onOpen?("energy") }
     }
 }
 

@@ -191,6 +191,13 @@ public extension HomeConfig {
             return "\(g > 0 ? "Importing" : "Exporting") \(EnergyState.format(watts: g))"
         }
 
+        /// What the panels make, worth a glance beside the notch: "3.2 kW" while they make some
+        /// (`idleWatts` or more); nil at night, while not known, or without panels.
+        public func production(_ s: EnergyState) -> String? {
+            guard hasSolar, let solar = s.solar, solar >= EnergyState.idleWatts else { return nil }
+            return EnergyState.format(watts: solar)
+        }
+
         /// The Solar tile's line: production · charge, of what the plan has ("3.2 kW · 78%", "640 W",
         /// "— · 78%"); "—" when nothing is known (energy.js `energyStatus`).
         public func status(_ s: EnergyState) -> String {
