@@ -493,6 +493,10 @@ final class ConnectionsModel {
         for (role, sensor) in HomeConfig(plan: plan ?? [:]).energy?.sensors ?? [:] {
             out["\(sensor.service)|\(sensor.id)"] = role.title
         }
+        let thermostat = plan?["thermostat"] as? [String: Any]
+        if let service = thermostat?["service"] as? String, let id = thermostat?["id"] as? String, !id.isEmpty {
+            out["\(service)|\(id)"] = "Thermostat"
+        }
         return out
     }
 }

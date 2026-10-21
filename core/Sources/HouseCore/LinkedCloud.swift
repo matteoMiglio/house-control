@@ -15,7 +15,8 @@ public protocol LinkedCloud: AnyObject {
     func command(appId: String, kind: String, link: [String: Any], patch: [String: Any],
                  state: [String: Any], log: EventLog) async throws
     /// What the linked devices report (app device id -> its `tuya` link), in the shape the
-    /// panel's `applyRemote` takes; nil when the cloud could not be reached.
+    /// panel's `applyRemote` takes; nil when the cloud could not be reached. An entry of kind
+    /// "thermostat" (link `sensorId`) is the plan's thermostat: its reading goes under "thermostat".
     func poll(_ links: [String: (kind: String, link: [String: Any])]) async -> [String: Any]?
     /// Every device of the account, in the editor's terms.
     func devices() async throws -> [[String: Any]]

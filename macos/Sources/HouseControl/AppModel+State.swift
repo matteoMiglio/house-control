@@ -91,7 +91,7 @@ extension AppModel {
         }
         home.refresh()
         islandModel?.homeChanged(tick: push.tick, source: push.source)
-        if !push.tick { updateStatus(homeStore.summary) }
+        updateStatus(homeStore.summary)
     }
 }
 

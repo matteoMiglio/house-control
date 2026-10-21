@@ -101,6 +101,10 @@ public struct PlanEditor {
         for (role, sensor) in HomeConfig.Energy(plan["energy"])?.sensors ?? [:] {
             out[DeviceRef(service: sensor.service, id: sensor.id)] = role.title
         }
+        if let link = plan["thermostat"] as? [String: Any], let service = link["service"] as? String,
+           let id = link["id"] as? String, !id.isEmpty {
+            out[DeviceRef(service: service, id: id)] = "Thermostat"
+        }
         return out
     }
 

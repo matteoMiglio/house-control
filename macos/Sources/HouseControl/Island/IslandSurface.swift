@@ -311,7 +311,6 @@ private struct Head: View {
 
     var body: some View {
         let home = model.home
-        let ac = home.firstACOn
         HStack(spacing: 0) {
             HStack(spacing: 8) {
                 Icon("home", size: 14).foregroundStyle(model.mood.withWhite(0.6))
@@ -323,7 +322,7 @@ private struct Head: View {
                 HStack(spacing: 5) {
                     LiveDot(on: home.anyOn).padding(.trailing, 2)
                     (Text(home.lightsOn > 0 ? "\(home.lightsOn) of \(home.config.lights.count)" : "No").foregroundColor(P.text).fontWeight(.semibold)
-                        + Text(" lights on") + Text(ac.map { " · \(Int($0.target))°" } ?? ""))
+                        + Text(" lights on") + Text(home.houseTemp.map { " · " + AppModel.degrees($0) } ?? ""))
                         .lineLimit(1)
                 }
                 .font(.system(size: 12).monospacedDigit())

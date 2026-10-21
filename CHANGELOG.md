@@ -5,6 +5,15 @@ What changed in each release of House Control. The Mac app is on
 
 ## Unreleased
 
+### The temperature of your home
+
+- **A thermostat for the whole home:** in Edit Home → **Home** → **Thermostat**, pick any linked platform's thermometer,
+  thermostat or AC that reads the room (Smart Life, Home Assistant, Hue, Apple Home). The menu bar shows its reading
+  beside the lamps that are on (`6 · 21.5°`), and so do the Home view, the sidebar and the island (`6 of 15 lights
+  on · 21.5°`). It is read once a minute even while nothing is open, so the menu bar stays current.
+- **No more AC set-point there:** with two ACs at different temperatures it said little. Without a thermostat no
+  degrees are shown; an AC's set-point stays on its own tile.
+
 ### A shorter menu
 
 - **The menu bar icon's menu and the island's gear** keep what you reach for: Open House Control, Edit Home, AI

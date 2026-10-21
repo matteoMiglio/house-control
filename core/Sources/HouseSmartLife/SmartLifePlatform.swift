@@ -70,7 +70,12 @@ public final class SmartLifePlatform: LinkedCloud {
         var lights: [String: Any] = [:]
         var acs: [String: Any] = [:]
         var features: [String: Any] = [:]
+        var thermostat: Double?
         for (id, entry) in entries {
+            if entry.kind == "thermostat" {
+                thermostat = (entry.link["sensorId"] as? String).flatMap { status[$0] }.flatMap(TuyaMapper.sensorTemperature)
+                continue
+            }
             guard let deviceId = entry.link["deviceId"] as? String else { continue }
             if entry.kind == "ac", let known = TuyaMapper.acFeatures(codes: cloud.knownCodes[deviceId] ?? [],
                                                                      ranges: cloud.knownRanges[deviceId] ?? [:]) {
@@ -89,7 +94,7 @@ public final class SmartLifePlatform: LinkedCloud {
             }
             if !state.isEmpty { acs[id] = state }
         }
-        return ["lights": lights, "acs": acs, "features": features]
+        return ["lights": lights, "acs": acs, "features": features, "thermostat": (thermostat as Any?) ?? NSNull()]
     }
 
     public func devices() async throws -> [[String: Any]] {

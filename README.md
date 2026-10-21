@@ -27,6 +27,7 @@
   Lamps light the scene the way they light the room; an AC that is running blows visible air.
 - **Lights.** Tap to toggle, drag across a tile to dim, open a light for brightness, white temperature and colour.
 - **Air conditioners.** Power, target temperature, mode and fan speed, with the room temperature from a real sensor if you have one.
+- **The temperature of your home.** Link a thermostat or a thermometer and the menu bar shows its reading.
 - **Scenes.** One tap sets every light and AC — "Cozy", "Movie", "Night", or your own.
 - **A visual editor.** Draw the rooms, drop in furniture, place lamps and ACs, and link each one to a real device.
 - **The view from outside, for planning security cameras.** The whole house on its plot — property line, fences,

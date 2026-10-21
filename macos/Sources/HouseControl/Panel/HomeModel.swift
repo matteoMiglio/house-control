@@ -44,6 +44,8 @@ final class HomeModel {
     private(set) var features: [String: ACFeatures] = [:]
     private(set) var scene: String?
     private(set) var energy = EnergyState()
+    /// The thermostat's reading in °C; nil without one.
+    private(set) var houseTemp: Double?
 
     /// The group the device list shows: "all" or a group id.
     private(set) var room = "all"
@@ -92,6 +94,7 @@ final class HomeModel {
         let energy = store.energyState
         if store.scene != scene { scene = store.scene }
         if energy != self.energy { self.energy = energy }
+        if store.houseTemp != houseTemp { houseTemp = store.houseTemp }
     }
 
     // MARK: - Reading

@@ -309,12 +309,14 @@ export function createConnections({ rerender, toast, usedBy, onOpen }) {
     return `${d.name}${d.room ? ` — ${d.room}` : ''}${d.online ? '' : ' (offline)'}`;
   }
 
+  /** A select of the connected platforms' devices of `kind` (one kind, or a list of them). */
   function picker(kind, current, include = () => true, none = kind === 'sensor' ? 'None — estimated' : 'Not linked — simulated') {
+    const kinds = [kind].flat();
     const select = h('select');
     select.append(h('option', { value: '' }, none));
     let found = false;
     for (const id of offered()) {
-      const list = devicesOf(id).filter((d) => d.kind === kind && include(d));
+      const list = devicesOf(id).filter((d) => kinds.includes(d.kind) && include(d));
       if (!list.length) continue;
       select.append(h('optgroup', { label: SERVICES[id].name }, list.map((d) => {
         const value = `${d.service}|${d.id}`;
@@ -396,6 +398,28 @@ export function createConnections({ rerender, toast, usedBy, onOpen }) {
       h('p.note', 'A temperature sensor in the same room. Without one, the AC’s own reading is used, or the temperature is estimated.'));
   }
 
+  /** The home's thermostat: any platform's thermometer, thermostat or AC that reads the room.
+   *  Its reading is the temperature the menu bar and the Home view show. */
+  function thermostatSection(doc, { snapshot, changed }) {
+    if (!anyConnected()) {
+      return section('Thermostat',
+        h('p.note', 'Connect Smart Life, Home Assistant, Philips Hue or Apple Home to show the temperature of your home.'),
+        h('button.btn.wide', { onclick: () => onOpen(null) }, icon('link', 14), 'Open Connections'));
+    }
+    if (!state.devices && !state.loading) setTimeout(() => load({ quiet: true }), 0);
+    const current = doc.thermostat?.id ? `${doc.thermostat.service}|${doc.thermostat.id}` : '';
+    const select = picker(['sensor', 'ac'], current, () => true, 'None');
+    select.addEventListener('change', () => {
+      snapshot();
+      const [service, id] = select.value ? select.value.split('|') : [];
+      if (service) doc.thermostat = { service, id }; else delete doc.thermostat;
+      changed();
+    });
+    return section('Thermostat',
+      h('label.field', h('span', 'Reads the house from'), select),
+      h('p.note', 'The menu bar and the Home view show its temperature; without one they show none.'));
+  }
+
   /** The sensors of the energy section: one per role, and which way a signed one counts. */
   function energySection(energy, { snapshot, changed }) {
     if (!anyConnected()) {
@@ -446,11 +470,12 @@ export function createConnections({ rerender, toast, usedBy, onOpen }) {
     for (const [role, s] of Object.entries(doc.energy?.sensors || {})) {
       if (s?.id) out.set(`${s.service}|${s.id}`, ENERGY_ROLES[role]?.name || role);
     }
+    if (doc.thermostat?.id) out.set(`${doc.thermostat.service}|${doc.thermostat.id}`, 'Thermostat');
     return out;
   }
 
   return {
-    state, load, refreshInfo, sidebarRow, overview, detail, tile, deviceSection, sensorSection, energySection, usedMap,
+    state, load, refreshInfo, sidebarRow, overview, detail, tile, deviceSection, sensorSection, thermostatSection, energySection, usedMap,
     connected, stopPairing,
     title: (id) => SERVICES[id]?.name,
     blurb: (id) => LOOK[id]?.blurb,

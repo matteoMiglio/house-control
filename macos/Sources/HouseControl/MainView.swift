@@ -108,14 +108,10 @@ private struct SidebarStatus: View {
         let ac = model.lastSummary["acOn"] as? Int ?? 0
         var parts: [String] = []
         if lights > 0 { parts.append("\(lights) \(lights == 1 ? "light" : "lights") on") }
-        if ac > 0 {
-            if let target = model.lastSummary["acTarget"] as? Int {
-                parts.append("AC \(target)°")
-            } else {
-                parts.append("AC on")
-            }
-        }
-        return parts.isEmpty ? "Everything off" : parts.joined(separator: " · ")
+        if ac > 0 { parts.append(ac == 1 ? "AC on" : "\(ac) ACs on") }
+        if parts.isEmpty { parts.append("Everything off") }
+        if let temp = model.lastSummary["houseTemp"] as? Double { parts.append(AppModel.degrees(temp)) }
+        return parts.joined(separator: " · ")
     }
 
     var body: some View {

@@ -27,6 +27,9 @@ public final class HomeStore {
     /// The power flow of the plan's energy section (`EnergyState`): read from its sensors, or
     /// simulated when it has none. Shown, never saved.
     public private(set) var energy: [String: JSONValue] = [:]
+    /// The house's temperature in °C, as the plan's thermostat reads it; nil without one, or
+    /// while it is offline. Shown, never saved.
+    public private(set) var houseTemp: Double?
     /// The scene the home is in, until something is changed by hand.
     public private(set) var scene: String?
     /// True when the state was read back from disk (or taken from a page that had it saved).
@@ -128,14 +131,12 @@ public final class HomeStore {
          "features": features.mapValues(\.any), "scene": (scene as Any?) ?? NSNull(), "energy": energy.mapValues(\.any)]
     }
 
-    /// For the menu bar icon: how many lamps are on, and the first running AC.
+    /// For the menu bar icon: how many lamps and ACs are on, and the thermostat's reading.
     public var summary: [String: Any] {
-        let running = acOrder.compactMap { id in acs[id].flatMap { $0["on"]?.bool == true ? $0 : nil } }
-        return ["lightsOn": lights.values.filter { $0["on"]?.bool == true }.count,
-                "lightsTotal": lights.count,
-                "acOn": running.count,
-                "acTarget": running.first?["target"]?.number.map { Int($0) } as Any? ?? NSNull(),
-                "acMode": running.first?["mode"]?.string as Any? ?? NSNull()]
+        ["lightsOn": lights.values.filter { $0["on"]?.bool == true }.count,
+         "lightsTotal": lights.count,
+         "acOn": acs.values.filter { $0["on"]?.bool == true }.count,
+         "houseTemp": (houseTemp as Any?) ?? NSNull()]
     }
 
     // MARK: - Changes
@@ -218,7 +219,7 @@ public final class HomeStore {
     }
 
     /// State the real devices reported. Never sent back to them as a command. A new reading of
-    /// the energy sensors alone is a `tick`: it moves the 3D view, nothing else.
+    /// the energy sensors or the thermostat alone is a `tick`: nothing to save or announce.
     public func applyRemote(_ update: [String: Any]) {
         if !restored {
             for key in ["lights", "acs", "features"] {
@@ -229,7 +230,17 @@ public final class HomeStore {
             }
         }
         let energyMoved = adoptEnergy(update["energy"])
-        if adopt(update) { emit(nil, local: false) } else if energyMoved { onChange?(Change(source: nil, tick: true)) }
+        let thermostatMoved = adoptThermostat(update["thermostat"])
+        if adopt(update) { emit(nil, local: false) } else if energyMoved || thermostatMoved { onChange?(Change(source: nil, tick: true)) }
+    }
+
+    /// Takes the thermostat's reading, to a tenth of a degree; null while it is offline.
+    private func adoptThermostat(_ value: Any?) -> Bool {
+        guard let value else { return false }
+        let next = (value as? NSNumber).map { ($0.doubleValue * 10).rounded() / 10 }
+        guard next != houseTemp else { return false }
+        houseTemp = next
+        return true
     }
 
     /// Takes the energy sensors' readings: a role whose sensor is offline becomes unknown.

@@ -109,7 +109,7 @@ private struct Header: View {
                         LiveDot(on: model.anyOn)
                         (Text(model.lightsOn > 0 ? "\(model.lightsOn) of \(model.config.lights.count)" : "No").foregroundColor(P.text).fontWeight(.semibold)
                             + Text(" lights on")
-                            + Text(model.firstACOn.map { " · AC \(Int($0.target))°" } ?? ""))
+                            + Text(model.houseTemp.map { " · " + AppModel.degrees($0) } ?? ""))
                             .lineLimit(1)
                     }
                     .font(.system(size: 12).monospacedDigit())

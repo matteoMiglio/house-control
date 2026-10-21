@@ -33,6 +33,8 @@ public final class DeviceHub {
     private var tuyaSensors: [String: (service: String, id: String)] = [:]
     /// The sensors of the plan's energy section, by what they report.
     private var energyLinks: [EnergyRole: HomeConfig.Energy.Sensor] = [:]
+    /// The plan's thermostat: any platform's thermometer or thermostat, for the house's temperature.
+    private var thermostat: (service: String, id: String)?
     private var refresh: Task<Void, Never>?
     /// The command in flight for each real device; the next one waits for it.
     private var commandTails: [String: Task<Void, Never>] = [:]
@@ -77,10 +79,12 @@ public final class DeviceHub {
     /// True when there is something to read at all. Energy sensors always are: while their
     /// platform cannot be reached, the panel must hear that their readings are not known.
     public var canPoll: Bool {
-        (connectedCloud != nil && !links.isEmpty) || !energyLinks.isEmpty || linkedIds.keys.contains { id in
+        (connectedCloud != nil && !links.isEmpty) || !energyLinks.isEmpty || thermostat != nil || linkedIds.keys.contains { id in
             service(id).map { $0.isConnected && $0.controlsDevices } ?? false
         }
     }
+    /// A thermostat gives the house's temperature, which the menu bar shows at all times.
+    public var hasThermostat: Bool { thermostat != nil }
     public var linkedDeviceCount: Int { links.count + serviceLinks.values.filter { !$0.id.isEmpty }.count }
 
     /// Takes the device links from `plan`; nil (a bundled demo) means everything is simulated.
@@ -89,9 +93,11 @@ public final class DeviceHub {
         serviceLinks = [:]
         tuyaSensors = [:]
         energyLinks = [:]
+        thermostat = nil
         defer { watchLinks() }
         guard let plan else { return }
         energyLinks = HomeConfig.Energy(plan["energy"])?.sensors ?? [:]
+        thermostat = Self.sensorLink(plan["thermostat"])
         for (kind, key) in [("light", "lights"), ("ac", "acs")] {
             for device in plan[key] as? [[String: Any]] ?? [] {
                 guard let id = device["id"] as? String else { continue }
@@ -127,6 +133,7 @@ public final class DeviceHub {
         }
         for sensor in tuyaSensors.values { ids[sensor.service, default: []].insert(sensor.id) }
         for sensor in energyLinks.values { ids[sensor.service, default: []].insert(sensor.id) }
+        if let thermostat, thermostat.service != "smartlife" { ids[thermostat.service, default: []].insert(thermostat.id) }
         return ids
     }
 
@@ -196,12 +203,13 @@ public final class DeviceHub {
     // MARK: - State
 
     /// What the linked devices report right now, in the shape the panel's `applyRemote`
-    /// takes. Nil when nothing is connected or the cloud could not be reached.
+    /// takes. Nil when nothing is connected or the cloud could not be reached. Like the energy
+    /// readings, `thermostat` is null while it cannot be read, so an old one never stays on screen.
     public func poll() async -> [String: Any]? {
         async let tuyaPart = pollCloud()
         async let servicePart = pollServices()
         let (fromTuya, fromServices) = await (tuyaPart, servicePart)
-        guard fromTuya != nil || fromServices != nil else { return nil }
+        guard fromTuya != nil || fromServices != nil || thermostat != nil else { return nil }
         var merged: [String: Any] = [:]
         for key in ["lights", "acs", "features"] {
             var section = fromTuya?[key] as? [String: Any] ?? [:]
@@ -216,6 +224,9 @@ public final class DeviceHub {
             merged[key] = section
         }
         if let energy = fromServices?["energy"] { merged["energy"] = energy }
+        if let thermostat {
+            merged["thermostat"] = (thermostat.service == "smartlife" ? fromTuya : fromServices)?["thermostat"] ?? NSNull()
+        }
         return merged
     }
 
@@ -256,12 +267,20 @@ public final class DeviceHub {
         }
         var out: [String: Any] = ["lights": lights, "acs": acs, "features": features]
         if !energyLinks.isEmpty { out["energy"] = energy }
+        if let thermostat, let reading = readings[thermostat.service]?[thermostat.id], reading.online {
+            out["thermostat"] = reading.temperature ?? reading.ac?["roomTemp"]
+        }
         return out
     }
 
+    /// The Smart Life devices, and the thermostat when it is one (under a key no plan id has).
     private func pollCloud() async -> [String: Any]? {
-        guard let cloud = connectedCloud, !links.isEmpty else { return nil }
-        return await cloud.poll(links)
+        var entries = links
+        if let thermostat, thermostat.service == "smartlife" {
+            entries["#thermostat"] = ("thermostat", ["sensorId": thermostat.id])
+        }
+        guard let cloud = connectedCloud, !entries.isEmpty else { return nil }
+        return await cloud.poll(entries)
     }
 
     /// Every device of every connected platform, in the editor's terms, plus what went

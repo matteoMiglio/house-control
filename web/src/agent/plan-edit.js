@@ -28,6 +28,7 @@ export function redactPlan(raw) {
       }
     }
   }
+  delete plan.thermostat;
   return plan;
 }
 
@@ -41,6 +42,7 @@ export function restoreLinks(plan, old) {
       Object.assign(d, links.get(d.id) || {});
     }
   }
+  if (old.thermostat) plan.thermostat = old.thermostat; else delete plan.thermostat;
   return plan;
 }
 

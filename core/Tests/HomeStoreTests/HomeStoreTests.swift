@@ -147,6 +147,20 @@ struct HomeStoreTests {
         #expect(ticks == 1)
     }
 
+    @Test func theThermostatGivesTheHouseTemperature() {
+        let store = HomeStore(plan: Self.plan, file: nil, transmit: nil)
+        var ticks = 0
+        store.onChange = { if $0.tick { ticks += 1 } }
+        #expect(store.summary["houseTemp"] is NSNull)
+        store.applyRemote(decoded(#"{"thermostat": 21.46}"#))
+        #expect(store.summary["houseTemp"] as? Double == 21.5)
+        store.applyRemote(decoded(#"{"thermostat": 21.5}"#))
+        #expect(ticks == 1)
+        store.applyRemote(decoded(#"{"thermostat": null}"#))
+        #expect(store.houseTemp == nil)
+        #expect(ticks == 2)
+    }
+
     @Test func widgetActionsAndPageIntents() {
         let store = HomeStore(plan: Self.plan, file: nil, transmit: nil)
         var sources: [String?] = []

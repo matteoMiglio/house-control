@@ -94,7 +94,7 @@ export async function bootEditor(root) {
   const links = createConnections({
     rerender: () => {
       renderSidebar();
-      if (['connections', 'service', 'light', 'ac', 'energy'].includes(sel.kind)) renderInspector();
+      if (['home', 'connections', 'service', 'light', 'ac', 'energy'].includes(sel.kind)) renderInspector();
     },
     toast,
     usedBy: () => links.usedMap(doc),
@@ -1165,6 +1165,7 @@ export async function bootEditor(root) {
         h('div.checks', bind('Flat roof in the outside view', h('input', { type: 'checkbox' }), {
           get: () => doc.roof !== false, set: (on) => { if (on) delete doc.roof; else doc.roof = false; }, event: 'change',
         }))),
+      links.thermostatSection(doc, linkHooks),
       section('Default camera',
         row(bind('Azimuth, °', number(1), { ...prop(doc.camera, 'azimuth', 34), parse: parseNum }),
           bind('Elevation, °', number(1), { ...prop(doc.camera, 'elevation', 47), parse: parseNum })),

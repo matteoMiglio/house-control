@@ -267,6 +267,7 @@ final class AppModel: NSObject {
     }
 
     func updateStatus(_ summary: [String: Any]) {
+        guard !NSDictionary(dictionary: summary).isEqual(to: lastSummary) else { return }
         lastSummary = summary
         refreshStatusIcon()
     }
@@ -279,13 +280,16 @@ final class AppModel: NSObject {
         let acOn = summary["acOn"] as? Int ?? 0
         var parts: [String] = []
         if lights > 0 { parts.append("\(lights)") }
-        if acOn > 0, let target = summary["acTarget"] as? Int { parts.append("\(target)°") }
+        if let temp = summary["houseTemp"] as? Double { parts.append(Self.degrees(temp)) }
         let house = lights > 0 || acOn > 0 ? "house.fill" : "house"
         button.image = agent.isLive ? pair(house, "sparkles") : symbol(house)
         button.attributedTitle = NSAttributedString(
             string: parts.isEmpty ? "" : " " + parts.joined(separator: " · "),
             attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .medium)])
     }
+
+    /// A house temperature as the summaries show it, like the ACs' room readings: "21.5°".
+    static func degrees(_ value: Double) -> String { String(format: "%.1f°", value) }
 
     /// Two symbols side by side as one template image.
     private func pair(_ first: String, _ second: String) -> NSImage? {
@@ -380,12 +384,12 @@ final class AppModel: NSObject {
         storedConnections?.plan = homePlan
         hub.setLinks(from: plans.activePlan == "custom" ? plans.customPlan() : nil)
         homeName = plans.activePlan == "custom" ? (plans.customPlanName ?? "My home") : "Demo home"
+        setPolling(false) // reads at once while something shows the devices, or a thermostat is linked
     }
 
     /// A platform was connected or disconnected: read the devices again and tell the phones.
     func connectionsChanged() {
         reloadLinks()
-        setPolling(false) // reads at once while the panel or the island is open
         sync.broadcast()
     }
 
@@ -449,14 +453,15 @@ final class AppModel: NSObject {
 
     // MARK: - Device state
 
-    /// Real devices are read while there is something on screen to show them in.
+    /// Real devices are read while there is something on screen to show them in, and once a
+    /// minute for a linked thermostat, whose reading the menu bar always shows.
     func setPolling(_ requested: Bool) {
-        let on = requested || panel.isVisible || primaryPlace == .home || island?.isExpanded == true
+        let shown = requested || panel.isVisible || primaryPlace == .home || island?.isExpanded == true
         pollTimer?.invalidate()
         pollTimer = nil
-        guard on, hub.canPoll else { return }
+        guard shown || hub.hasThermostat, hub.canPoll else { return }
         poll()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 12, repeats: true) { [weak self] _ in
+        pollTimer = Timer.scheduledTimer(withTimeInterval: shown ? 12 : 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.poll() }
         }
     }

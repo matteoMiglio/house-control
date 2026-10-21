@@ -14,6 +14,8 @@ Everything you do not link stays simulated.
 On the Mac all four are set up under **Connections** in the window's sidebar. Then,
 in **Edit Home**, select a lamp or an AC on the plan, choose its device under **Real device**, and press **Save & apply**. Picking a
 lamp fills in what it can do (dimming, white temperature, colour); picking an AC takes over its temperature range.
+Select **Home** (click an empty spot) to pick the home's **Thermostat**: any thermometer, thermostat or AC that
+reads the room. Its temperature is what the menu bar and the Home view show; without one they show no degrees.
 
 On the iPhone they are in **Settings**: Smart Life, Home Assistant and Philips Hue each have their own screen, and
 **Settings → Devices** links the plan's lamps and ACs (or adds your devices to a room, already linked). No Mac is
@@ -37,7 +39,7 @@ Tuya — so connecting it brings all of them in at once.
 | `light.*` | A lamp: on/off, brightness, white temperature and colour as its colour modes allow |
 | `switch.*` | A lamp on a plug: on/off |
 | `climate.*` | An air conditioner: power, target, the modes it has (`cool`, `heat`, `dry`, `fan_only`, `auto`/`heat_cool`), its fan speeds, swing, `eco` and `sleep` presets |
-| `sensor.*` with `device_class: temperature` | A thermometer for an AC's room |
+| `sensor.*` with `device_class: temperature` | A thermometer for an AC's room, or the home's thermostat |
 | `sensor.*` in W or kW (`device_class: power`) | A power sensor for the plan's solar panels, battery, grid or house ([`energy`](floor-plan.md#energy)) |
 | `sensor.*` with `device_class: battery` | A battery level: how full the home battery is |
 
