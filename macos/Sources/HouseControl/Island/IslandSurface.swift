@@ -553,14 +553,16 @@ private struct EnergyChip: View {
                 ChipText(name: cfg.name, sub: cfg.status(s), on: on, color: rgb)
             }
         }
-        .overlay(alignment: .bottomLeading) {
-            // The battery's charge along the bottom edge, as on the tile.
+        .overlay {
+            // The battery's charge along the bottom edge, as on the tile, kept inside the chip's corners.
             Rectangle().fill(Color(hex: PanelColors.charge(s.charge)))
                 .frame(height: 2.5)
                 .scaleEffect(x: (s.charge ?? 0) / 100, anchor: .leading)
                 .opacity(cfg.hasBattery && s.charge != nil ? 0.9 : 0)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .animation(P.ease(0.26), value: s.charge)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .allowsHitTesting(false)
         }
         .onTapGesture { model.onOpen?("energy") }
         .accessibilityElement(children: .combine)
@@ -607,11 +609,13 @@ private struct LightChip: View {
                     ChipText(name: cfg.name, sub: "\(s.status(cfg)) · \(home.groupName(cfg.room))", on: s.on, color: rgb)
                 }
             }
-            .overlay(alignment: .bottomLeading) {
+            .overlay {
                 Rectangle().fill(rgb.color)
                     .frame(width: geo.size.width * (s.on ? s.brightness : 0), height: 2.5)
                     .opacity(s.on && cfg.dimmable ? 0.9 : 0)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .allowsHitTesting(false)
             }
             .scaleEffect(drag.pressed && !drag.dragging ? 0.96 : 1)
             .animation(P.spring, value: drag.pressed)
