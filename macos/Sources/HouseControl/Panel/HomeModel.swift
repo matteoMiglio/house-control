@@ -13,6 +13,8 @@ final class HomeModel {
         case ac(String)
         /// A security camera, with how far it makes out each level of detail (from the page).
         case camera(Camera)
+        /// The solar panels and the battery: the power flow, read-only.
+        case energy
     }
 
     /// A camera's sheet: its numbers, and its reach for each DORI level (coverage.js).
@@ -41,6 +43,7 @@ final class HomeModel {
     private(set) var acs: [String: ACState] = [:]
     private(set) var features: [String: ACFeatures] = [:]
     private(set) var scene: String?
+    private(set) var energy = EnergyState()
 
     /// The group the device list shows: "all" or a group id.
     private(set) var room = "all"
@@ -86,7 +89,9 @@ final class HomeModel {
         if lights != self.lights { self.lights = lights }
         if acs != self.acs { self.acs = acs }
         if features != self.features { self.features = features }
+        let energy = store.energyState
         if store.scene != scene { scene = store.scene }
+        if energy != self.energy { self.energy = energy }
     }
 
     // MARK: - Reading
@@ -106,6 +111,12 @@ final class HomeModel {
     }
 
     func inScope(_ room: String) -> Bool { self.room == "all" || room == self.room }
+
+    /// The Solar tile: in the whole home, and in the room the battery stands in.
+    var energyShown: Bool {
+        guard let energy = config.energy else { return false }
+        return room == "all" || energy.batteryRoom == room
+    }
 
     // MARK: - Doing
 
@@ -171,6 +182,8 @@ final class HomeModel {
         case .light(let id): focus(groupFocus(config.light(id)?.room ?? "all"))
         case .ac(let id): focus(["kind": "ac", "id": id])
         case .camera(let camera): focus(["kind": "camera", "id": camera.id])
+        // The power flow is the whole house's: the 3D view stays where it is.
+        case .energy: focus(groupFocus(room))
         }
     }
 
@@ -206,11 +219,11 @@ final class HomeModel {
         case .ac(let id)?: focus(["kind": "ac", "id": id])
         case .camera(let camera)?: focus(["kind": "camera", "id": camera.id])
         case .light(let id)?: focus(groupFocus(config.light(id)?.room ?? "all"))
-        case nil: focus(groupFocus(room))
+        case .energy?, nil: focus(groupFocus(room))
         }
     }
 
-    /// A widget's link or HOUSE_OPEN_DEVICE: a lamp's or an AC's sheet, or a room.
+    /// A widget's link or HOUSE_OPEN_DEVICE: a lamp's or an AC's sheet, a room, or "energy".
     func open(device id: String) {
         if config.ac(id) != nil {
             openSheet(.ac(id))
@@ -219,6 +232,8 @@ final class HomeModel {
         } else if config.group(id) != nil {
             closeSheet()
             if room != id { selectRoom(id) }
+        } else if id == "energy", config.energy != nil {
+            openSheet(.energy)
         }
     }
 

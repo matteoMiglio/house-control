@@ -6,7 +6,7 @@
 import './editor.css';
 import {
   normalize, loadRawConfig, LIGHT_KINDS, FLOOR_KINDS, isLinked, OUTDOOR_KINDS, OUTDOOR_HEIGHT, GROUND_KINDS, outdoorShape,
-  withCameraDefaults, VEHICLE_SIZE, OUTSIDE, OUTSIDE_NAME, OUTDOOR_LIGHTS, WALL_LIGHTS, PANEL_MODULE,
+  withCameraDefaults, VEHICLE_SIZE, OUTSIDE, OUTSIDE_NAME, OUTDOOR_LIGHTS, WALL_LIGHTS, PANEL_MODULE, tidyEnergy,
 } from '../config.js';
 import { energySimulation, stepEnergy, SIM_DAY } from '../energy.js';
 import { createWorld } from '../three/world.js';
@@ -490,15 +490,6 @@ export async function bootEditor(root) {
     touch();
   }
 
-  // An energy section with nothing left in it goes.
-  function tidyEnergy() {
-    const e = doc.energy;
-    if (!e) return;
-    if (!e.panels?.length) delete e.panels;
-    if (!Object.keys(e.sensors || {}).length) delete e.sensors;
-    if (!Object.keys(e).length) delete doc.energy;
-  }
-
   // A property line a few metres around the house.
   function addBoundary() {
     snapshot();
@@ -566,7 +557,7 @@ export async function bootEditor(root) {
       snapshot();
       if (kind === 'panel') doc.energy.panels.splice(index, 1);
       else delete doc.energy.battery;
-      tidyEnergy();
+      tidyEnergy(doc);
       sel = { kind: 'energy' };
       touch();
       return;
@@ -574,9 +565,10 @@ export async function bootEditor(root) {
     snapshot();
     const [gone] = doc[KEYS[kind]].splice(index, 1);
     if (kind === 'room') {
-      // Devices cannot outlive their room.
+      // Devices cannot outlive their room, the battery included.
       doc.lights = doc.lights.filter((l) => l.room !== gone.id);
       doc.acs = doc.acs.filter((a) => a.room !== gone.id);
+      tidyEnergy(doc);
     }
     if (kind === 'light' || kind === 'ac' || kind === 'room') {
       const ids = new Set([...doc.lights, ...doc.acs].map((d) => d.id));
@@ -1248,7 +1240,7 @@ export async function bootEditor(root) {
       // Kept apart from the plan until something is put in it.
       const e = doc.energy || {};
       const panels = e.panels || [];
-      const energyHooks = { snapshot: () => snapshot(), changed: () => { doc.energy = e; tidyEnergy(); touch(); } };
+      const energyHooks = { snapshot: () => snapshot(), changed: () => { doc.energy = e; tidyEnergy(doc); touch(); } };
       nodes.push(section('Solar panels',
         panels.length
           ? panels.map((p, i) => h('button.row.home-row', { onclick: () => select({ kind: 'panel', index: i }) },

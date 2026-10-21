@@ -62,6 +62,20 @@ enum PanelColors {
 
     static func mode(_ mode: String) -> RGB { RGB(modes[mode] ?? modes["cool"]!) }
 
+    /// The colour of power by where it comes from (three/energy.js `FLOW_COLORS`).
+    static let solar = "#ffc24a"
+    static let battery = "#4fe0b0"
+    static let grid = "#6aa6ff"
+    /// What the house uses, warm like a lamp.
+    static let house = "#ffd9a0"
+
+    /// A battery's charge as its front shows it: green, amber when low, red when nearly empty
+    /// (three/energy.js `chargeColor`).
+    static func charge(_ c: Double?) -> String {
+        guard let c else { return battery }
+        return c < 15 ? "#ff6b5a" : c < 35 ? solar : battery
+    }
+
     /// tempToColor() in lights.js: the same stops, mixed the same way.
     static func temperature(_ kelvin: Double) -> RGB {
         let stops: [(Double, String)] = [(2200, "#ff9438"), (3000, "#ffbd7a"), (4200, "#ffe2c2"), (6500, "#dfe9ff")]

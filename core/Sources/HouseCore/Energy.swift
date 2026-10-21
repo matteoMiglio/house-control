@@ -80,13 +80,36 @@ public struct EnergyState: Equatable, Sendable {
 
     /// Nothing is known.
     public var isEmpty: Bool { [solar, grid, load, battery, charge].allSatisfy { $0 == nil } }
+}
 
-    /// What the house uses: its own sensor's reading, or what flows in from the grid, the panels
-    /// and the battery (energy.js `consumption`).
-    public var consumption: Double? {
-        if let load { return load }
-        guard let grid else { return nil }
-        return Swift.max(0, grid + (solar ?? 0) + (battery ?? 0))
+// MARK: - In words
+
+/// The power flow as the panel writes it (energy.js `formatWatts`, `batteryStatus`…).
+public extension EnergyState {
+    /// Below this a flow is idle (energy.js `IDLE_WATTS`).
+    static let idleWatts = 20.0
+
+    /// A power, whichever way it flows: in W below 1 kW ("640", "W"), in kW with one decimal from
+    /// there ("3.2", "kW"); nil when not known.
+    static func watts(_ w: Double?) -> (number: String, unit: String)? {
+        guard let w, w.isFinite else { return nil }
+        let watts = Int(abs(w).rounded())
+        if watts < 1000 { return ("\(watts)", "W") }
+        let tenths = Int((Double(watts) / 100).rounded())
+        return ("\(tenths / 10).\(tenths % 10)", "kW")
+    }
+
+    /// "640 W", "3.2 kW", or "—" when not known.
+    static func format(watts w: Double?) -> String { watts(w).map { "\($0.number) \($0.unit)" } ?? "—" }
+
+    /// A battery's charge: "78%", or "—".
+    static func format(charge c: Double?) -> String { c.map { "\(Int($0.rounded()))%" } ?? "—" }
+
+    /// "Charging 700 W", "Discharging 1.2 kW", "Idle", or "—".
+    var batteryStatus: String {
+        guard let b = battery else { return "—" }
+        if abs(b) < Self.idleWatts { return "Idle" }
+        return "\(b < 0 ? "Charging" : "Discharging") \(Self.format(watts: b))"
     }
 }
 
@@ -104,6 +127,8 @@ public extension HomeConfig {
         public let panels: Int
         /// A home battery stands in the plan.
         public let battery: Bool
+        /// The room it stands in; nil outside the house (or without a battery).
+        public let batteryRoom: String?
         /// The output, in W, at which the panels look their brightest; nil: the most seen so far.
         public let peak: Double?
         public let sensors: [EnergyRole: Sensor]
@@ -112,6 +137,7 @@ public extension HomeConfig {
             guard let e = value as? [String: Any] else { return nil }
             panels = (e["panels"] as? [Any])?.count ?? 0
             battery = e["battery"] is [String: Any]
+            batteryRoom = (e["battery"] as? [String: Any])?["room"] as? String
             peak = (e["peak"] as? NSNumber)?.doubleValue
             var sensors: [EnergyRole: Sensor] = [:]
             for (key, link) in e["sensors"] as? [String: Any] ?? [:] {
@@ -125,6 +151,52 @@ public extension HomeConfig {
 
         /// Without a single real sensor the power flow is simulated, like an unlinked lamp.
         public var simulated: Bool { sensors.isEmpty }
+
+        /// Production to show: there are panels, or a solar sensor (energy.js `energyHas`).
+        public var hasSolar: Bool { panels > 0 || sensors[.solar] != nil }
+        /// A battery to show: one stands in the plan, or a sensor reports one.
+        public var hasBattery: Bool { battery || sensors[.battery] != nil || sensors[.charge] != nil }
+
+        /// What the panel calls it: Solar, or Battery for a battery without panels (energy.js `energyName`).
+        public var name: String { hasBattery && !hasSolar ? "Battery" : "Solar" }
+
+        /// The panels' and the battery's power, to work the rest out with: 0 for what the plan does
+        /// not have, nil for what it has but is not known right now (energy.js `sources`).
+        private func sources(_ s: EnergyState) -> (solar: Double, battery: Double)? {
+            let solar = s.solar ?? (hasSolar ? nil : 0), battery = s.battery ?? (hasBattery ? nil : 0)
+            guard let solar, let battery else { return nil }
+            return (solar, battery)
+        }
+
+        /// What the house uses: its own sensor's reading, or what flows in from the grid, the panels
+        /// and the battery when all of that is known (energy.js `consumption`).
+        public func consumption(_ s: EnergyState) -> Double? {
+            if let load = s.load { return load }
+            guard let grid = s.grid, let from = sources(s) else { return nil }
+            return Swift.max(0, grid + from.solar + from.battery)
+        }
+
+        /// From the grid, in W (negative: exporting): its own sensor's reading, or what the house uses
+        /// beyond what the panels and the battery give it, when all of that is known (energy.js `gridPower`).
+        public func gridPower(_ s: EnergyState) -> Double? {
+            if let grid = s.grid { return grid }
+            guard let load = s.load, let from = sources(s) else { return nil }
+            return load - Swift.max(0, from.solar) - from.battery
+        }
+
+        /// "Importing 640 W", "Exporting 1.2 kW", "Idle", or "—" (energy.js `gridStatus`).
+        public func gridStatus(_ s: EnergyState) -> String {
+            guard let g = gridPower(s) else { return "—" }
+            if abs(g) < EnergyState.idleWatts { return "Idle" }
+            return "\(g > 0 ? "Importing" : "Exporting") \(EnergyState.format(watts: g))"
+        }
+
+        /// The Solar tile's line: production · charge, of what the plan has ("3.2 kW · 78%", "640 W",
+        /// "— · 78%"); "—" when nothing is known (energy.js `energyStatus`).
+        public func status(_ s: EnergyState) -> String {
+            let parts = (hasSolar ? [EnergyState.format(watts: s.solar)] : []) + (hasBattery ? [EnergyState.format(charge: s.charge)] : [])
+            return parts.allSatisfy { $0 == "—" } ? "—" : parts.joined(separator: " · ")
+        }
     }
 }
 
@@ -142,9 +214,10 @@ public struct EnergySimulation: Sendable {
     /// The battery's state of charge, in %.
     var charge = 55.0
 
-    /// `area`: square metres of panels; without a `peak` they make 200 W each.
+    /// `area`: square metres of panels; without a `peak` they make 200 W each. No panels make
+    /// nothing, whatever the peak.
     public init(peak: Double?, area: Double, battery: Bool) {
-        self.peak = peak ?? area * 200
+        self.peak = area > 0 ? peak ?? area * 200 : 0
         hasBattery = battery
     }
 

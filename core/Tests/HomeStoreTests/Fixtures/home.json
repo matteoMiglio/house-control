@@ -224,6 +224,7 @@
   "energy": {
     "panels": 2,
     "battery": true,
+    "batteryRoom": "living",
     "peak": 6000,
     "sensors": {}
   }

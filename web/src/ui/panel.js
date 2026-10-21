@@ -5,6 +5,10 @@ import { h, clamp, createSlider, createColorPad, openMenu } from './dom.js';
 import { icon } from './icons.js';
 import { lightColor } from '../three/lights.js';
 import { MODE_COLORS } from '../three/ac.js';
+import { FLOW_COLORS, chargeColor } from '../three/energy.js';
+import {
+  IDLE_WATTS, consumption, wattsParts, formatWatts, formatCharge, gridStatus, batteryStatus, energyHas, energyName, energyStatus,
+} from '../energy.js';
 import { AC_SWINGS } from '../store.js';
 import { haptic, isPhone } from '../bridge.js';
 import { LEVELS, levelDistances } from '../coverage.js';
@@ -266,8 +270,37 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     };
   }
 
+  // Solar production and the battery's charge, read-only: a tap opens the numbers.
+  function energyTile() {
+    const has = energyHas(config.energy);
+    const name = energyName(config.energy);
+    const sub = h('div.tile-sub');
+    const level = h('div.tile-level');
+    const open = () => { haptic('light'); openSheet({ kind: 'energy' }); };
+    const el = h('div.tile.energy', { role: 'button', tabindex: 0, 'aria-label': name, onclick: open, vars: { '--c': FLOW_COLORS.solar } },
+      h('div.bubble', icon(has.solar ? 'sun' : 'battery', 19)),
+      h('div.tile-text', h('div.tile-name', name), sub),
+      level);
+    el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } });
+    return {
+      el,
+      update() {
+        const e = state.energy;
+        el.classList.toggle('on', e.solar >= IDLE_WATTS);
+        // The battery's charge along the bottom edge, where a lamp tile shows its brightness.
+        el.classList.toggle('charged', has.battery && Number.isFinite(e.charge));
+        level.style.setProperty('--level', Number.isFinite(e.charge) ? String(e.charge / 100) : '0');
+        level.style.background = chargeColor(e.charge);
+        sub.textContent = energyStatus(e, config.energy);
+      },
+    };
+  }
+
   for (const cfg of config.acs) tiles.set(cfg.id, acTile(cfg));
   for (const cfg of config.lights) tiles.set(cfg.id, lightTile(cfg));
+  // In the whole home, first under its own heading; in a room, in the one the battery stands in.
+  const energy = config.energy ? energyTile() : null;
+  const energyIn = (room) => room === 'all' || room === config.energy?.battery?.room;
 
   function toggleLight(id) {
     haptic('light');
@@ -279,6 +312,10 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     const nodes = [];
     let i = 0;
     const add = (t) => { t.el.style.setProperty('--i', i++); nodes.push(t.el); };
+    if (energy && energyIn(ui.room)) {
+      if (ui.room === 'all') nodes.push(h('div.group-label', 'Energy'));
+      add(energy);
+    }
     for (const room of config.groups) {
       if (ui.room !== 'all' && room.id !== ui.room) continue;
       const devices = [...tiles.values()].filter((t) => t.cfg.room === room.id);
@@ -301,7 +338,8 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
 
   function openSheet(target) {
     ui.sheet = target;
-    sheetView = target.kind === 'ac' ? acSheet(target.id) : target.kind === 'camera' ? cameraSheet(target.id) : lightSheet(target.id);
+    sheetView = target.kind === 'ac' ? acSheet(target.id) : target.kind === 'camera' ? cameraSheet(target.id)
+      : target.kind === 'energy' ? energySheet() : lightSheet(target.id);
     sheet.replaceChildren(...sheetView.nodes);
     panel.classList.add('hidden');
     sheet.classList.remove('hidden');
@@ -309,7 +347,8 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     sheet.inert = false;
     card.classList.add('detail');
     hideTooltip();
-    onFocus(target.kind === 'light' ? focusOf(store.lightCfg.get(target.id).room) : target);
+    // The power flow is the whole house's: the 3D view stays where it is.
+    onFocus(target.kind === 'light' ? focusOf(store.lightCfg.get(target.id).room) : target.kind === 'energy' ? focusOf(ui.room) : target);
     update();
   }
 
@@ -453,6 +492,49 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     return { nodes, update() {} };
   }
 
+  // Solar panels and a home battery: what flows where right now, read-only.
+  function energySheet() {
+    const has = energyHas(config.energy);
+    const simulated = !Object.keys(config.energy.sensors).length;
+    const num = h('span.num');
+    const unit = h('small');
+    const big = h('div.big', num, unit);
+    const row = (label, color) => {
+      const dot = h('i');
+      const value = h('b');
+      const el = h('div.dori-row', { vars: { '--dori': color } }, dot, h('span', label), value);
+      return { el, set(text, c = color) { value.textContent = text; el.style.setProperty('--dori', c); } };
+    };
+    const use = row('House consumption', '#ffd9a0');
+    const grid = row('Grid', FLOW_COLORS.grid);
+    const battery = has.battery ? row('Battery', FLOW_COLORS.battery) : null;
+    // The charge is the big number when there are no panels.
+    const charge = has.battery && has.solar ? row('Charge', FLOW_COLORS.battery) : null;
+    const nodes = [
+      sheetHead(energyName(config.energy), h('div.sheet-sub', has.solar ? 'Production' : 'Charge', ' · ', h('b', simulated ? 'Simulated' : 'Live'),
+        simulated ? null : h('span.live'))),
+      h('div.readout', big),
+      h('div.dori.energy-rows', [use, grid, battery, charge].filter(Boolean).map((r) => r.el)),
+      h('div.sheet-note', icon(has.solar ? 'sun' : 'battery', 20), simulated
+        ? 'Simulated until a sensor is linked: a sunny day passes in six minutes. Link them in Edit Home → Solar & battery.'
+        : 'Read from the sensors linked in Edit Home → Solar & battery, as they report.'),
+    ];
+    return {
+      nodes,
+      update() {
+        const e = state.energy;
+        const shown = has.solar ? wattsParts(e.solar) : Number.isFinite(e.charge) ? { number: String(Math.round(e.charge)), unit: '%' } : null;
+        num.textContent = shown?.number ?? '—';
+        unit.textContent = shown?.unit ?? '';
+        big.classList.toggle('off', has.solar ? !(e.solar >= IDLE_WATTS) : !shown);
+        use.set(formatWatts(consumption(e, config.energy)));
+        grid.set(gridStatus(e, config.energy));
+        battery?.set(batteryStatus(e));
+        charge?.set(formatCharge(e.charge), chargeColor(e.charge));
+      },
+    };
+  }
+
   function lightSheet(id) {
     const cfg = store.lightCfg.get(id);
     const s = () => state.lights[id];
@@ -594,6 +676,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     listTitle.replaceChildren(h('b', ui.room === 'all' ? 'Whole home' : roomName.get(ui.room)), ` · ${scopedOn} of ${scoped.length} on`);
 
     for (const t of tiles.values()) t.update();
+    energy?.update();
     sheetView?.update();
     const m = css(mood());
     card.style.setProperty('--mood', m);

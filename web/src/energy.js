@@ -5,18 +5,44 @@
 // Every value is in watts, with the house as the point of view: `solar` produced, `load` used,
 // `grid` positive while importing and negative while exporting, `battery` positive while it
 // discharges and negative while it charges; `charge` is the battery's state of charge in %.
-// A value that is not known is null (or missing).
+// A value that is not known is null (or missing), and so is anything worked out from it.
 
 /** Below this a line of the power flow is idle: not drawn. */
 export const IDLE_WATTS = 20;
 
 const known = (v) => Number.isFinite(v);
 
-/** What the house uses: its own sensor's reading, or what flows in from the rest. */
-export function consumption(e) {
+/** What a plan's energy section has: production when it has panels or a solar sensor, a
+ *  battery when one stands in the plan or a sensor reports one. Known or not right now. */
+export function energyHas(energy) {
+  const s = energy?.sensors || {};
+  return { solar: Boolean(energy?.panels.length || s.solar), battery: Boolean(energy?.battery || s.battery || s.charge) };
+}
+
+// The panels' and the battery's power, to work the rest out with: 0 for what the plan does not
+// have, null for what it has but is not known right now (a sensor offline, or none linked).
+function sources(e, energy) {
+  const has = energyHas(energy);
+  const part = (v, present) => (known(v) ? v : present ? null : 0);
+  return { solar: part(e.solar, has.solar), battery: part(e.battery, has.battery) };
+}
+
+/** What the house uses: its own sensor's reading, or what flows in from the rest when all of
+ *  that is known. */
+export function consumption(e, energy) {
   if (known(e.load)) return e.load;
-  if (!known(e.grid)) return null;
-  return Math.max(0, e.grid + (known(e.solar) ? e.solar : 0) + (known(e.battery) ? e.battery : 0));
+  const { solar, battery } = sources(e, energy);
+  if (!known(e.grid) || solar === null || battery === null) return null;
+  return Math.max(0, e.grid + solar + battery);
+}
+
+/** From the grid, in W (negative: exporting): its own sensor's reading, or what the house uses
+ *  beyond what the panels and the battery give it, when all of that is known. */
+export function gridPower(e, energy) {
+  if (known(e.grid)) return e.grid;
+  const { solar, battery } = sources(e, energy);
+  if (!known(e.load) || solar === null || battery === null) return null;
+  return e.load - Math.max(0, solar) - battery;
 }
 
 /**
@@ -27,20 +53,70 @@ export function consumption(e) {
  *   roofBattery   panels → battery, never negative
  *   batteryHouse  battery → house; negative: house → battery (charging from the grid)
  *   gridHouse     grid → house; negative: house → grid (exporting)
- * A line whose power cannot be worked out is null.
+ * A line whose power cannot be worked out (a reading it depends on is not known) is null.
  */
-export function energyFlows(e) {
-  const solar = known(e.solar) ? Math.max(0, e.solar) : 0;
-  const battery = known(e.battery) ? e.battery : 0;
-  const grid = known(e.grid) ? e.grid : known(e.load) ? e.load - solar - battery : null;
-  const charging = Math.max(0, -battery);
-  const solarToBattery = Math.min(solar, charging);
+export function energyFlows(e, energy) {
+  const { solar, battery } = sources(e, energy);
+  const sun = solar === null ? null : Math.max(0, solar);
+  const charging = battery === null ? null : Math.max(0, -battery);
+  // What the panels send to the battery: nothing when either gives nothing, else both must be known.
+  const solarToBattery = sun === 0 || charging === 0 ? 0 : sun === null || charging === null ? null : Math.min(sun, charging);
   return {
-    roofHouse: solar - solarToBattery,
+    roofHouse: sun === null || solarToBattery === null ? null : sun - solarToBattery,
     roofBattery: solarToBattery,
-    batteryHouse: Math.max(0, battery) - (charging - solarToBattery),
-    gridHouse: grid,
+    batteryHouse: battery === null || solarToBattery === null ? null : Math.max(0, battery) - (charging - solarToBattery),
+    gridHouse: gridPower(e, energy),
   };
+}
+
+/* ---------- in words ---------- */
+
+/** A power as the panel writes it, whichever way it flows: in W below 1 kW ("640", "W"), in kW
+ *  with one decimal from there ("3.2", "kW"); null when not known. */
+export function wattsParts(w) {
+  if (!known(w)) return null;
+  const watts = Math.round(Math.abs(w));
+  if (watts < 1000) return { number: String(watts), unit: 'W' };
+  const tenths = Math.round(watts / 100);
+  return { number: `${Math.floor(tenths / 10)}.${tenths % 10}`, unit: 'kW' };
+}
+
+/** "640 W", "3.2 kW", or "—" when not known. */
+export function formatWatts(w) {
+  const p = wattsParts(w);
+  return p ? `${p.number} ${p.unit}` : '—';
+}
+
+/** A battery's charge: "78%", or "—". */
+export const formatCharge = (c) => (known(c) ? `${Math.round(c)}%` : '—');
+
+/** "Importing 640 W", "Exporting 1.2 kW", "Idle", or "—". */
+export function gridStatus(e, energy) {
+  const g = gridPower(e, energy);
+  if (!known(g)) return '—';
+  if (Math.abs(g) < IDLE_WATTS) return 'Idle';
+  return `${g > 0 ? 'Importing' : 'Exporting'} ${formatWatts(g)}`;
+}
+
+/** "Charging 700 W", "Discharging 1.2 kW", "Idle", or "—". */
+export function batteryStatus(e) {
+  if (!known(e.battery)) return '—';
+  if (Math.abs(e.battery) < IDLE_WATTS) return 'Idle';
+  return `${e.battery < 0 ? 'Charging' : 'Discharging'} ${formatWatts(e.battery)}`;
+}
+
+/** What the panel calls it: Solar, or Battery for a battery without panels. */
+export function energyName(energy) {
+  const has = energyHas(energy);
+  return has.battery && !has.solar ? 'Battery' : 'Solar';
+}
+
+/** The Solar tile's line: production · charge, of what the plan has ("3.2 kW · 78%", "640 W",
+ *  "— · 78%"); "—" when nothing is known. */
+export function energyStatus(e, energy) {
+  const has = energyHas(energy);
+  const parts = [has.solar && formatWatts(e.solar), has.battery && formatCharge(e.charge)].filter(Boolean);
+  return parts.every((p) => p === '—') ? '—' : parts.join(' · ');
 }
 
 /* ---------- simulation ---------- */
@@ -57,7 +133,8 @@ export function energySimulation(energy) {
   if (!energy || Object.keys(energy.sensors).length) return null;
   const area = energy.panels.reduce((sum, p) => sum + p.size[0] * p.size[1], 0);
   if (!(area > 0) && !energy.battery) return null;
-  return { peak: energy.peak ?? area * WATTS_PER_M2, battery: Boolean(energy.battery), charge: 55 };
+  // No panels make nothing, whatever peak the plan still has.
+  return { peak: area > 0 ? energy.peak ?? area * WATTS_PER_M2 : 0, battery: Boolean(energy.battery), charge: 55 };
 }
 
 /** The simulated power flow at `time` (seconds since 1970), `seconds` after the last step. */

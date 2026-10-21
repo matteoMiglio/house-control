@@ -13,6 +13,8 @@ import { energyFlows, consumption, IDLE_WATTS } from '../energy.js';
 
 /** The colour of power by where it comes from: the sun, the battery, the grid. */
 export const FLOW_COLORS = { solar: '#ffc24a', battery: '#4fe0b0', grid: '#6aa6ff' };
+/** A battery's charge as its front shows it: green, amber when low, red when nearly empty. */
+export const chargeColor = (c) => (c == null ? FLOW_COLORS.battery : c < 15 ? '#ff6b5a' : c < 35 ? FLOW_COLORS.solar : FLOW_COLORS.battery);
 
 const TILT = THREE.MathUtils.degToRad(10); // panels on a flat roof stand on racks, raised at the back
 const RACK = 0.12;     // the low edge, above the roof
@@ -275,17 +277,18 @@ export class EnergyUnit {
     this.setWhole(false);
   }
 
-  /** Seen whole (from outside, with the roof on) or cut open: panels on the roof, or their outline. */
-  setWhole(whole) {
+  /** Seen whole (from outside) or cut open. Panels stand on the roof: without one (cut open, or a
+   *  plan without a roof) only their outline shows. The power flow belongs to the view from
+   *  outside, roof or not; the cut-open rooms are about lamps and ACs. */
+  setWhole(whole, roof = true) {
     this.whole = whole;
     for (const a of this.arrays) {
-      for (const o of a.solid) o.visible = whole;
-      for (const o of a.ghost) o.visible = !whole;
+      for (const o of a.solid) o.visible = whole && roof;
+      for (const o of a.ghost) o.visible = !(whole && roof);
     }
     // A battery outside the house belongs to the view from outside, like the lamps out there.
-    const shown = Boolean(this.battery) && (whole || Boolean(this.cfg.battery.room));
-    if (this.battery) this.battery.group.visible = shown;
-    for (const key of ['roofBattery', 'batteryHouse']) if (this.lines[key]) this.lines[key].shown = shown;
+    if (this.battery) this.battery.group.visible = whole || Boolean(this.cfg.battery.room);
+    for (const line of Object.values(this.lines)) if (line) line.shown = whole;
   }
 
   /** The output that looks brightest: the plan's peak, or the most seen so far. */
@@ -294,14 +297,14 @@ export class EnergyUnit {
   }
 
   apply(energy = {}, { instant = false } = {}) {
-    const flows = energyFlows(energy);
+    const flows = energyFlows(energy, this.cfg);
     for (const [key, line] of Object.entries(this.lines)) if (line) line.goal = flows[key] ?? 0;
     const solar = Number.isFinite(energy.solar) ? energy.solar : 0;
     this.peakSeen = Math.max(this.peakSeen, solar);
     this.levelGoal = Math.min(1, solar / this.peak);
     this.chargeGoal = Number.isFinite(energy.charge) ? energy.charge : null;
     if (this.chargeGoal == null || this.charge == null) this.charge = this.chargeGoal;
-    this.useGoal = consumption(energy) ?? 0;
+    this.useGoal = consumption(energy, this.cfg) ?? 0;
     if (instant) {
       for (const line of Object.values(this.lines)) if (line) line.watts = line.goal;
       this.level = this.levelGoal;
@@ -357,7 +360,7 @@ export class EnergyUnit {
     const charging = net < -IDLE_WATTS;
     const discharging = net > IDLE_WATTS;
     const c = this.charge;
-    const hue = c == null ? FLOW_COLORS.battery : c < 15 ? '#ff6b5a' : c < 35 ? FLOW_COLORS.solar : FLOW_COLORS.battery;
+    const hue = chargeColor(c);
     this.battery.segments.forEach((m, i) => {
       const lit = c == null ? 0 : THREE.MathUtils.clamp(c / 10 - i, 0, 1);
       const wave = charging ? 0.75 + 0.45 * Math.max(0, Math.sin(this.clock * 3 - i * 0.75))

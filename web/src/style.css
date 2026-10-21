@@ -482,6 +482,10 @@ html.native-controls .stage-btn { display: none !important; }
 
 .tile:focus-visible { outline: none; border-color: rgba(120, 175, 255, 0.8); }
 
+/* Solar and the battery: read-only, the charge along the bottom edge. */
+.tile.energy { grid-column: 1 / -1; cursor: pointer; }
+.tile.energy.charged .tile-level { opacity: 0.9; }
+
 .panel-toast {
   position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 30;
   padding: 11px 14px; border-radius: 16px;
@@ -727,6 +731,7 @@ html.native-controls .stage-btn { display: none !important; }
 .dori-row i { width: 8px; height: 8px; border-radius: 50%; background: var(--dori); box-shadow: 0 0 8px var(--dori); }
 .dori-row span { flex: 1; }
 .dori-row b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.dori.energy-rows { margin-top: 18px; }
 .round.active { background: rgba(127, 211, 255, 0.18); border-color: rgba(127, 211, 255, 0.4); color: #cfeeff; }
 
 .sheet-note { margin-top: auto; padding: 12px 14px; border-radius: 16px; background: var(--glass); border: 1px solid var(--line); font-size: 12px; line-height: 1.45; color: var(--muted); display: flex; gap: 10px; align-items: center; }
@@ -806,6 +811,7 @@ html.ios .pad { max-height: 150px; border-radius: 18px; }
 html.ios .swatch { height: 36px; border-radius: 12px; }
 html.ios .swatches { margin-top: 12px; }
 html.ios .sheet-note { font-size: 13px; }
+html.ios .energy-rows .dori-row { font-size: 14px; padding: 7px 0; }
 html.ios .menu { min-width: 190px; border-radius: 20px; }
 html.ios .menu button { height: 46px; font-size: 15px; border-radius: 14px; }
 html.ios .menu button:active { background: rgba(255, 255, 255, 0.1); color: var(--text); }

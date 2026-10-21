@@ -38,6 +38,7 @@ struct HomeConfigTests {
         if let energy, let mine = config.energy {
             #expect(mine.panels == energy["panels"] as? Int)
             #expect(mine.battery == energy["battery"] as? Bool)
+            #expect(mine.batteryRoom == energy["batteryRoom"] as? String)
             #expect(mine.peak == (energy["peak"] as? NSNumber)?.doubleValue)
             let sensors = energy["sensors"] as? [String: [String: Any]] ?? [:]
             #expect(mine.sensors.keys.map(\.rawValue).sorted() == sensors.keys.sorted())
@@ -59,6 +60,78 @@ struct HomeConfigTests {
         #expect(config.energy?.sensors == [.grid: .init(service: "homeassistant", id: "sensor.grid", invert: true)])
         #expect(config.energy?.simulated == false)
         #expect(HomeConfig(plan: ["energy": ["battery": ["pos": [1, 1]]]]).energy?.simulated == true)
+    }
+
+    /// The same words as energy.js (web/test/energy.test.js checks the same cases).
+    @Test func thePowerFlowReadsLikeTheWeb() {
+        #expect(EnergyState.format(watts: 640) == "640 W")
+        #expect(EnergyState.format(watts: 0) == "0 W")
+        #expect(EnergyState.format(watts: 999.4) == "999 W")
+        #expect(EnergyState.format(watts: 999.6) == "1.0 kW")
+        #expect(EnergyState.format(watts: 3245.62) == "3.2 kW")
+        #expect(EnergyState.format(watts: 3250) == "3.3 kW")
+        #expect(EnergyState.format(watts: 12040) == "12.0 kW")
+        #expect(EnergyState.format(watts: -1180.3) == "1.2 kW")
+        #expect(EnergyState.format(watts: nil) == "—")
+        #expect(EnergyState.format(charge: 78.4) == "78%")
+        #expect(EnergyState.format(charge: nil) == "—")
+
+        let panelsOnly = HomeConfig(plan: ["energy": ["panels": [["pos": [3, 2], "size": [4, 3.4]]]]]).energy!
+        #expect(panelsOnly.gridStatus(EnergyState(grid: 640)) == "Importing 640 W")
+        #expect(panelsOnly.gridStatus(EnergyState(grid: -1180)) == "Exporting 1.2 kW")
+        #expect(panelsOnly.gridStatus(EnergyState(grid: 10)) == "Idle")
+        #expect(panelsOnly.gridStatus(EnergyState(solar: 1000, load: 1500)) == "Importing 500 W")
+        #expect(panelsOnly.gridStatus(EnergyState(solar: 1000)) == "—")
+        #expect(EnergyState(battery: -700).batteryStatus == "Charging 700 W")
+        #expect(EnergyState(battery: 1250).batteryStatus == "Discharging 1.3 kW")
+        #expect(EnergyState(battery: 5).batteryStatus == "Idle")
+        #expect(EnergyState().batteryStatus == "—")
+    }
+
+    @Test func theSolarTileShowsWhatThePlanHas() {
+        let panel: [String: Any] = ["pos": [3, 2], "size": [4, 3.4]]
+        let sensor: [String: Any] = ["service": "homeassistant", "id": "x"]
+        func energy(_ section: [String: Any]) -> HomeConfig.Energy { HomeConfig(plan: ["energy": section]).energy! }
+        let both = energy(["panels": [panel], "battery": ["pos": [1, 1], "room": "living"]])
+        let panelsOnly = energy(["panels": [panel]])
+        let batteryOnly = energy(["battery": ["pos": [1, 1]]])
+        let sensorsOnly = energy(["sensors": ["solar": sensor, "charge": sensor]])
+        #expect(both.batteryRoom == "living" && batteryOnly.batteryRoom == nil)
+        #expect([both.hasSolar, both.hasBattery] == [true, true])
+        #expect([panelsOnly.hasSolar, panelsOnly.hasBattery] == [true, false])
+        #expect([batteryOnly.hasSolar, batteryOnly.hasBattery] == [false, true])
+        #expect([sensorsOnly.hasSolar, sensorsOnly.hasBattery] == [true, true])
+        #expect(both.name == "Solar" && batteryOnly.name == "Battery" && energy([:]).name == "Solar")
+
+        #expect(both.status(EnergyState(solar: 3245, charge: 78.4)) == "3.2 kW · 78%")
+        #expect(panelsOnly.status(EnergyState(solar: 640, charge: 78)) == "640 W")
+        #expect(batteryOnly.status(EnergyState(solar: 0, charge: 78)) == "78%")
+        #expect(both.status(EnergyState(charge: 78)) == "— · 78%")
+        #expect(both.status(EnergyState(solar: 640)) == "640 W · —")
+        #expect(both.status(EnergyState()) == "—")
+        #expect(energy([:]).status(EnergyState()) == "—")
+    }
+
+    /// energy.js checks the same cases ("what depends on a reading that is not known…").
+    @Test func whatDependsOnAnUnknownReadingIsNotKnown() {
+        let full = HomeConfig(plan: ["energy": ["panels": [["pos": [3, 2], "size": [4, 3.4]]], "battery": ["pos": [1, 1]]]]).energy!
+        let batteryOnly = HomeConfig(plan: ["energy": ["battery": ["pos": [1, 1]]]]).energy!
+        let offline = EnergyState(grid: nil, load: 600, battery: 0)
+        #expect(full.gridPower(offline) == nil)
+        #expect(full.gridStatus(offline) == "—")
+        #expect(full.consumption(EnergyState(grid: 300, battery: 0)) == nil)
+        #expect(batteryOnly.consumption(EnergyState(grid: 300, battery: 0)) == 300)
+        #expect(batteryOnly.gridPower(EnergyState(load: 600, battery: 100)) == 500)
+        #expect(full.consumption(EnergyState(solar: 1000, grid: -200, battery: -300)) == 500)
+        #expect(full.consumption(EnergyState(grid: 9, load: 640)) == 640)
+    }
+
+    @Test func noPanelsMakeNoSunWhateverThePeak() {
+        var sim = EnergySimulation(peak: 5000, area: 0, battery: true)
+        #expect(sim.step(at: EnergySimulation.day / 2, seconds: 3).solar == 0)
+        let plan: [String: Any] = ["energy": ["peak": 5000, "battery": ["pos": [1, 1]]]]
+        var fromPlan = EnergySimulation(plan: plan)
+        #expect(fromPlan?.step(at: EnergySimulation.day / 2, seconds: 3).solar == 0)
     }
 
     @Test func aRoomCalledOutsideIsNotTheOutsideGroup() {

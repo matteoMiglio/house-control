@@ -165,6 +165,7 @@ async function boot() {
     if (store.acCfg.has(id)) panel.openSheet({ kind: 'ac', id });
     else if (store.lightCfg.has(id)) panel.openSheet({ kind: 'light', id });
     else if (config.rooms.some((r) => r.id === id)) { panel.closeSheet(); panel.selectRoom(id); }
+    else if (id === 'energy' && config.energy) panel.openSheet({ kind: 'energy' });
   };
   // AI Access: an AI assistant's requests are run here, where the state of every device lives.
   const agent = createAgent({
@@ -241,6 +242,7 @@ async function boot() {
   const opened = !nativeControls && (window.__HOUSE_BOOT__?.openDevice || new URLSearchParams(location.search).get('device'));
   if (store.acCfg.has(opened)) panel.openSheet({ kind: 'ac', id: opened });
   else if (store.lightCfg.has(opened)) panel.openSheet({ kind: 'light', id: opened });
+  else if (opened === 'energy' && config.energy) panel.openSheet({ kind: 'energy' });
 
   if (!isNative) show();
   post('ready', { summary: store.summary(), legacy: store.legacy });

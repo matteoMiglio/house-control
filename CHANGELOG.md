@@ -11,7 +11,12 @@ What changed in each release of House Control. The Mac app is on
   shows its charge (with a shimmer running up while it charges), and lines of light carrying the power from the
   roof to the house and the battery, from the battery to the house and between the house and the grid — thicker
   and faster the more watts flow, easing smoothly from one reading to the next. Cut open, the panels show as an
-  outline over the rooms.
+  outline over the rooms, without the power flow.
+- **The numbers, in the panel** (Mac and iPhone): a **Solar** tile under **Energy**, and in the battery's room, shows
+  what the panels make and the battery's charge (`3.2 kW · 78%`), lit while the sun is out, with the charge along
+  its bottom edge. It opens a sheet with production, house consumption, the grid (importing or exporting) and the
+  battery (charging, discharging or idle), updated live. A home without panels or without a battery shows what it
+  has, and a reading that is not known shows as a dash.
 - **From any Home Assistant integration:** power sensors in W or kW and battery levels are listed in Connections
   (Mac and iPhone), and **Edit Home → Solar & battery** places the panels and the battery and links a sensor to
   each role: solar production, grid, house consumption, battery power and charge, with **Reversed** for a sensor

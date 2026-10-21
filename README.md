@@ -143,6 +143,7 @@ go on; **Quit** in the menu bar icon's menu (or ⌘Q in a window) ends it.
 | Drag sideways across a light tile | Dim it |
 | Click the sliders icon on a light tile | Brightness, white temperature, colour |
 | Click an AC, or its tile | Open its sheet: temperature, mode, fan speed |
+| Click the **Solar** tile | What the panels make, what the house uses, the grid and the battery, live |
 | Click a room | Zoom in on it and list only its devices |
 | Click the trees button (on the iPhone, in the corner of the 3D view) | See the house from outside, with its cameras; click it again to go back inside |
 | Click **Outside** among the rooms | Lamps outside the house, seen from outside |
@@ -394,7 +395,7 @@ npm run dev
 
 Then open `http://localhost:5199/`. Add `?plan=studio` for the second demo plan, `?mode=editor` for the editor,
 `?mode=island` for the island, `?mode=agent` for the AI Access window (with a simulated link), `?platform=ios` for the iPhone layout, or `?device=living.ac` to start on a
-device's sheet. Set `PORT` to use another port.
+device's sheet (`?device=energy` for the solar one). Set `PORT` to use another port.
 
 Environment variables understood by the app:
 
@@ -405,7 +406,7 @@ Environment variables understood by the app:
 | `HOUSE_DATA_DIR=/some/folder` | Keep plan, session and log there instead of Application Support, and do not persist panel state. Handy for a clean test run |
 | `HOUSE_OPEN_ON_LAUNCH=1` | Open the panel at launch |
 | `HOUSE_OPEN_EDITOR=1` | Open the editor at launch (`connections`, `smartlife`, `homeassistant`, `hue` or `homekit` opens it on that screen) |
-| `HOUSE_OPEN_DEVICE=<id>` | Start the panel on that light's or AC's sheet |
+| `HOUSE_OPEN_DEVICE=<id>` | Start the panel on that light's or AC's sheet (`energy`: the solar sheet) |
 | `HOUSE_PIN=1` | Keep the panel open when it loses focus |
 | `HOUSE_OPEN_WINDOW=1` | Open the main window at launch (it otherwise opens by itself only the very first time) |
 | `HOUSE_OPEN_SETTINGS=1` | Open the window on Settings at launch |

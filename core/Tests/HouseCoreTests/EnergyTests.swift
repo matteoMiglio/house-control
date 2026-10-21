@@ -136,6 +136,31 @@ struct EnergyTests {
         #expect(!hub.canPoll)
     }
 
+    @Test func anOutageMakesTheEnergyReadingsUnknown() async {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let meters = MeterService()
+        let hub = DeviceHub(directory: dir, secret: { _ in MemorySecretStore() }, homeKit: meters)
+        hub.setLinks(from: Self.plan)
+        meters.failing = true // the platform cannot be read (Home Assistant down, a revoked token)
+        var update = await hub.poll()
+        var energy = update?["energy"] as? [String: Any]
+        #expect(energy?.keys.sorted() == ["charge", "grid", "load", "solar"])
+        #expect(energy?.values.allSatisfy { $0 is NSNull } == true)
+        #expect((update?["lights"] as? [String: Any])?.isEmpty != false) // lamps and ACs keep what they showed
+        meters.failing = false
+        meters.connected = false
+        #expect(hub.canPoll) // still read, to say so
+        update = await hub.poll()
+        energy = update?["energy"] as? [String: Any]
+        #expect(energy?.values.allSatisfy { $0 is NSNull } == true)
+        let store = HomeStore(plan: Self.plan, file: nil, transmit: nil)
+        store.applyRemote(["energy": ["solar": 2400.0, "grid": 300.0]])
+        store.applyRemote(update ?? [:])
+        #expect(store.energyState.isEmpty)
+    }
+
     // MARK: - The store
 
     @Test func theStoreKeepsWhatTheSensorsReport() {
@@ -185,12 +210,13 @@ struct EnergyTests {
         for state in [night, noon] {
             let balance = (state.solar ?? 0) + (state.battery ?? 0) + (state.grid ?? 0) - (state.load ?? 0)
             #expect(abs(balance) < 0.001)
-            #expect(state.consumption == state.load)
+            #expect(HomeConfig(plan: Self.plan).energy?.consumption(state) == state.load)
             #expect((0...100).contains(state.charge ?? -1))
         }
-        #expect(EnergyState(solar: 1000, grid: -200, battery: -300).consumption == 500)
-        #expect(EnergyState(solar: 1000).consumption == nil)
-        var noBattery = EnergySimulation(peak: 5000, area: 0, battery: false)
+        let energy = HomeConfig(plan: Self.plan).energy
+        #expect(energy?.consumption(EnergyState(solar: 1000, grid: -200, battery: -300)) == 500)
+        #expect(energy?.consumption(EnergyState(solar: 1000)) == nil)
+        var noBattery = EnergySimulation(peak: 5000, area: 4, battery: false)
         let alone = noBattery.step(at: midnight + day / 2, seconds: 3)
         #expect(alone.battery == nil && alone.charge == nil)
         #expect(alone.grid == (alone.load ?? 0) - (alone.solar ?? 0))
@@ -240,18 +266,22 @@ struct LiveEnergyTests {
     }
 }
 
-/// A platform whose meters report a fixed power flow; the charge sensor is offline.
+/// A platform whose meters report a fixed power flow; the charge sensor is offline. It can be
+/// made to fail, or to be disconnected.
 private final class MeterService: DeviceService {
     let id = "homekit"
     let title = "Meters"
     var onChange: (() -> Void)?
-    var isConnected: Bool { true }
-    var info: [String: Any] { ["connected": true] }
+    var connected = true
+    var failing = false
+    var isConnected: Bool { connected }
+    var info: [String: Any] { ["connected": connected] }
     var watched: Set<String> = []
 
     func devices() async throws -> [ServiceDevice] { [] }
     func read(_ ids: Set<String>) async throws -> [String: DeviceReading] {
-        [
+        if failing { throw URLError(.cannotConnectToHost) }
+        return [
             "PV": DeviceReading(power: 2400),
             "GRID": DeviceReading(power: -300),
             "LOAD": DeviceReading(power: -700),

@@ -265,6 +265,11 @@ you have no sensor for: without `grid`, it is worked out from the others where i
 sensor is linked, the power flow is simulated — a sunny day passes in six minutes — the way an unlinked lamp is.
 **Solar & battery** in the editor places the panels and the battery and links the sensors.
 
+The panel lists a **Solar** tile (**Battery** without panels) first under **Energy**, and in the room the battery
+stands in: what the panels make and the battery's charge (`3.2 kW · 78%`, a dash for what is not known right now),
+with the charge along its bottom edge. It opens the numbers: production, house consumption, the grid (importing
+or exporting) and the battery (charging, discharging or idle), updated as the sensors report.
+
 ## `scenes`
 
 | Field | Meaning |

@@ -275,8 +275,7 @@ export function createWorld(canvas, config, store, { onHover, onPick, background
       scene.add(site.group, site.roof);
     }
     if (site) site.group.visible = site.roof.visible = whole;
-    // Panels stand on the roof; without one (cut open, or a plan without a roof) only their outline shows.
-    energy?.setWhole(whole && config.roof);
+    energy?.setWhole(whole, config.roof);
     night.visible = !whole;
     day.visible = whole;
     scene.fog = whole ? fog : null;

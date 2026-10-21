@@ -161,12 +161,19 @@ private struct DeviceGrid: View {
             VStack(alignment: .leading, spacing: 8) {
                 let shown = model.config.groups.filter { model.room == "all" || $0.id == model.room }
                 let any = shown.contains { g in model.config.lights.contains { $0.room == g.id } || model.config.acs.contains { $0.room == g.id } }
-                if !any { GroupLabel(text: "No devices in this room yet") }
+                if !any, !model.energyShown { GroupLabel(text: "No devices in this room yet") }
+                // In the whole home, first under its own heading; in a room, in the one the battery stands in.
+                if model.energyShown, let energy = model.config.energy {
+                    if model.room == "all" { GroupLabel(text: "Energy") }
+                    EnergyTile(model: model, cfg: energy)
+                }
                 ForEach(shown) { group in
                     let acs = model.config.acs.filter { $0.room == group.id }
                     let lights = model.config.lights.filter { $0.room == group.id }
                     if !acs.isEmpty || !lights.isEmpty {
-                        if model.room == "all" { GroupLabel(text: group.name).padding(.top, group.id == shown.first?.id ? 0 : 8) }
+                        if model.room == "all" {
+                            GroupLabel(text: group.name).padding(.top, group.id == shown.first?.id && !model.energyShown ? 0 : 8)
+                        }
                         ForEach(acs) { ACTile(model: model, cfg: $0) }
                         TilePairs(model: model, lights: lights)
                     }
@@ -411,6 +418,65 @@ struct ACTile: View {
         .animation(.easeOut(duration: 0.26), value: s.on)
         .animation(.easeOut(duration: 0.26), value: s.mode)
         .animation(P.ease(0.3), value: s.target)
+    }
+}
+
+/// Solar production and the battery's charge, read-only: a click opens the numbers.
+struct EnergyTile: View {
+    let model: HomeModel
+    let cfg: HomeConfig.Energy
+    @StateObject private var hover = Hover()
+
+    var body: some View {
+        let s = model.energy
+        let on = (s.solar ?? 0) >= EnergyState.idleWatts
+        let rgb = RGB(PanelColors.solar)
+        let c = rgb.color
+        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        HStack(spacing: 11) {
+            Icon(cfg.hasSolar ? "sun" : "battery", size: 19)
+                .foregroundStyle(on ? Color(red: 36 / 255, green: 21 / 255, blue: 3 / 255) : P.muted)
+                .frame(width: 38, height: 38)
+                .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(on ? c : Color.white.opacity(0.07)))
+                .shadow(color: on ? c : .clear, radius: 11)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(cfg.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(P.text).lineLimit(1)
+                Text(cfg.status(s))
+                    .font(.system(size: 11.5).monospacedDigit())
+                    .foregroundStyle(on ? rgb.withWhite(0.45) : P.muted)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 68)
+        .background {
+            if on {
+                shape.fill(LinearGradient(colors: [c.opacity(0.26), c.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing))
+            } else {
+                shape.fill(hover.on ? P.glassHi : P.glass)
+            }
+        }
+        .overlay(alignment: .bottomLeading) {
+            // The battery's charge along the bottom edge, where a lamp tile shows its brightness.
+            Rectangle().fill(Color(hex: PanelColors.charge(s.charge)))
+                .frame(height: 3)
+                .scaleEffect(x: (s.charge ?? 0) / 100, anchor: .leading)
+                .opacity(cfg.hasBattery && s.charge != nil ? 0.9 : 0)
+                .animation(P.ease(0.26), value: s.charge)
+        }
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(on ? c.opacity(0.42) : P.line))
+        .shadow(color: on ? c.opacity(0.5) : .clear, radius: 10, y: 12)
+        .contentShape(shape)
+        .onTapGesture { model.openSheet(.energy) }
+        .onHover { hover.on = $0 }
+        .animation(.easeOut(duration: 0.26), value: on)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(cfg.name)
+        .accessibilityValue(cfg.status(s))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { model.openSheet(.energy) }
     }
 }
 

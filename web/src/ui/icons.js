@@ -7,6 +7,7 @@ import {
   Undo2, Activity, KeyRound, ArrowUpRight, Camera, Square,
   HouseWifi, Smartphone, Radar, CircleCheck, CircleAlert, ChevronRight, Unlink, LoaderCircle, Router,
   List, Trash2, Scan, Redo2, Map as MapIcon, DoorClosed, Armchair, Cctv, Trees, Fence, LampWallDown, Spotlight,
+  BatteryMedium,
 } from 'lucide';
 
 /** The icons by the names the UI uses (the native Mac panel draws the same ones: scripts/lucide-icons.mjs). */
@@ -25,6 +26,7 @@ export const ICONS = {
   next: ChevronRight, unlink: Unlink, spinner: LoaderCircle, bridge: Router, bulb: Lightbulb,
   list: List, trash: Trash2, fit: Scan, redo: Redo2, map: MapIcon, opening: DoorClosed, furniture: Armchair,
   cctv: Cctv, trees: Trees, fence: Fence, lantern: LampWallDown, post: LampFloor, flood: Spotlight,
+  battery: BatteryMedium,
 };
 
 export function icon(name, size = 18, stroke = 1.8) {

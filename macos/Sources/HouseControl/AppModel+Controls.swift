@@ -34,7 +34,8 @@ extension AppModel {
         }
     }
 
-    /// HOUSE_OPEN_DEVICE=<id>: the first time the page is ready, that lamp's or AC's sheet (or room).
+    /// HOUSE_OPEN_DEVICE=<id>: the first time the page is ready, that lamp's or AC's sheet (or room,
+    /// or "energy" for the solar sheet).
     func openDeviceOnLaunch() {
         guard !openedLaunchDevice, let device = ProcessInfo.processInfo.environment["HOUSE_OPEN_DEVICE"] else { return }
         openedLaunchDevice = true

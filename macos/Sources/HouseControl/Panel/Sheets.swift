@@ -2,7 +2,7 @@ import Combine
 import HouseCore
 import SwiftUI
 
-/// A lamp's, an AC's or a camera's detail sheet, in place of the device list.
+/// A lamp's, an AC's, a camera's or the solar detail sheet, in place of the device list.
 struct DeviceSheet: View {
     let model: HomeModel
     let sheet: HomeModel.Sheet
@@ -12,6 +12,7 @@ struct DeviceSheet: View {
         case .light(let id): if let cfg = model.config.light(id) { LightSheet(model: model, cfg: cfg) }
         case .ac(let id): if let cfg = model.config.ac(id) { ACSheet(model: model, cfg: cfg) }
         case .camera(let camera): CameraSheet(model: model, camera: camera)
+        case .energy: if let cfg = model.config.energy { EnergySheet(model: model, cfg: cfg) }
         }
     }
 }
@@ -41,17 +42,30 @@ private struct SheetHead<Sub: View>: View {
 
 /// `.big`: the readout, ticking up or down as it changes.
 private struct BigNumber: View {
-    let value: Int
+    let text: String
+    let value: Double
     let unit: String
     let off: Bool
 
+    init(value: Int, unit: String, off: Bool) {
+        self.init(text: "\(value)", value: Double(value), unit: unit, off: off)
+    }
+
+    /// `text`: the number as written ("3.2"), `value` what it ticks by.
+    init(text: String, value: Double, unit: String, off: Bool) {
+        self.text = text
+        self.value = value
+        self.unit = unit
+        self.off = off
+    }
+
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
-            Text("\(value)")
+            Text(text)
                 .font(.system(size: 68, weight: .light))
                 .kerning(-2.4)
                 .monospacedDigit()
-                .contentTransition(.numericText(value: Double(value)))
+                .contentTransition(.numericText(value: value))
                 .animation(P.ease(0.26), value: value)
             Text(unit).font(.system(size: 19, weight: .semibold)).foregroundStyle(P.accent)
         }
@@ -451,6 +465,60 @@ private struct CameraSheet: View {
     /// 2.5 as "2.5", 100 as "100", as JavaScript prints numbers.
     static func number(_ v: Double) -> String {
         v == v.rounded() ? "\(Int(v))" : String(format: "%g", v)
+    }
+}
+
+// MARK: - Solar and battery
+
+/// What flows where right now, read-only: production big, then the house, the grid and the battery.
+private struct EnergySheet: View {
+    let model: HomeModel
+    let cfg: HomeConfig.Energy
+
+    var body: some View {
+        let s = model.energy
+        // Without panels the battery's charge is the big number.
+        let big = cfg.hasSolar ? EnergyState.watts(s.solar) : s.charge.map { (number: "\(Int($0.rounded()))", unit: "%") }
+        VStack(spacing: 0) {
+            SheetHead(model: model, name: cfg.name) {
+                Text(cfg.hasSolar ? "Production" : "Charge")
+                Text("·")
+                Text(cfg.simulated ? "Simulated" : "Live").foregroundStyle(P.text).fontWeight(.semibold)
+                if !cfg.simulated { LiveDot(on: true) }
+            }
+            BigNumber(text: big?.number ?? "—", value: cfg.hasSolar ? s.solar ?? 0 : s.charge ?? 0, unit: big?.unit ?? "",
+                      off: cfg.hasSolar ? (s.solar ?? 0) < EnergyState.idleWatts : big == nil)
+                .padding(.top, 18)
+            VStack(spacing: 0) {
+                row("House consumption", EnergyState.format(watts: cfg.consumption(s)), PanelColors.house)
+                row("Grid", cfg.gridStatus(s), PanelColors.grid)
+                if cfg.hasBattery {
+                    row("Battery", s.batteryStatus, PanelColors.battery)
+                    if cfg.hasSolar { row("Charge", EnergyState.format(charge: s.charge), PanelColors.charge(s.charge)) }
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(P.glass))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(P.line))
+            .padding(.top, 18)
+            Spacer(minLength: 16)
+            SheetNote(icon: cfg.hasSolar ? "sun" : "battery", text: cfg.simulated
+                ? "Simulated until a sensor is linked: a sunny day passes in six minutes. Link them in Edit Home → Solar & battery."
+                : "Read from the sensors linked in Edit Home → Solar & battery, as they report.")
+        }
+    }
+
+    /// A `.dori-row`: a dot in the colour of that power, its name, and its value.
+    private func row(_ label: String, _ value: String, _ color: String) -> some View {
+        HStack(spacing: 9) {
+            Circle().fill(Color(hex: color)).frame(width: 8, height: 8).shadow(color: Color(hex: color), radius: 4)
+            Text(label).frame(maxWidth: .infinity, alignment: .leading)
+            Text(value).foregroundStyle(P.text).fontWeight(.semibold).monospacedDigit()
+        }
+        .font(.system(size: 12.5))
+        .foregroundStyle(P.muted)
+        .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
     }
 }
 

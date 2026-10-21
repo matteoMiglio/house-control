@@ -255,6 +255,18 @@ export function normalize(raw) {
   };
 }
 
+/** Tidies a plan's energy section as written (the editor's, after a change): a battery whose room
+ *  is gone goes too (devices cannot outlive their room), a peak without panels goes, and so do
+ *  empty lists and a section with nothing left in it. */
+export function tidyEnergy(raw) {
+  const e = raw.energy;
+  if (!e) return;
+  if (e.battery?.room != null && !(raw.rooms || []).some((r) => r.id === e.battery.room)) delete e.battery;
+  if (!e.panels?.length) { delete e.panels; delete e.peak; }
+  if (!Object.keys(e.sensors || {}).length) delete e.sensors;
+  if (!Object.keys(e).length) delete raw.energy;
+}
+
 // Solar panels on the roof, a home battery, and the sensors that report the power flow. Every
 // part is optional: panels without a battery, a battery and a grid meter without panels…
 function normalizeEnergy(e, roomIds) {
@@ -281,7 +293,7 @@ function normalizeEnergy(e, roomIds) {
   need(e.sensors == null || isObject(e.sensors), '"energy.sensors" must be an object: role → { service, id }');
   const sensors = {};
   for (const [role, s] of Object.entries(e.sensors || {})) {
-    need(role in ENERGY_ROLES, `Energy sensor "${role}" is not one of ${Object.keys(ENERGY_ROLES).join(', ')}`);
+    need(Object.hasOwn(ENERGY_ROLES, role), `Energy sensor "${role}" is not one of ${Object.keys(ENERGY_ROLES).join(', ')}`);
     need(isObject(s) && typeof s.service === 'string' && typeof s.id === 'string', `Energy sensor "${role}" needs "service" and "id"`);
     need(s.invert == null || typeof s.invert === 'boolean', `Energy sensor "${role}" has an "invert" that is not true or false`);
     if (s.service && s.id) sensors[role] = { service: s.service, id: s.id, invert: Boolean(s.invert) };

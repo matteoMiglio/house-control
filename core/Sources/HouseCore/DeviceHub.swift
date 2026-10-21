@@ -74,9 +74,10 @@ public final class DeviceHub {
 
     public var isConnected: Bool { connectedCloud != nil || services.contains { $0.isConnected && $0.controlsDevices } }
     public var hasLinks: Bool { !links.isEmpty || !serviceLinks.isEmpty }
-    /// True when there is something to read at all.
+    /// True when there is something to read at all. Energy sensors always are: while their
+    /// platform cannot be reached, the panel must hear that their readings are not known.
     public var canPoll: Bool {
-        (connectedCloud != nil && !links.isEmpty) || linkedIds.keys.contains { id in
+        (connectedCloud != nil && !links.isEmpty) || !energyLinks.isEmpty || linkedIds.keys.contains { id in
             service(id).map { $0.isConnected && $0.controlsDevices } ?? false
         }
     }
@@ -220,7 +221,9 @@ public final class DeviceHub {
 
     /// Home Assistant, Hue and Apple Home, each asked once for all of its linked devices.
     /// `energy` has every linked role of the energy section: its value in the panel's
-    /// convention (`EnergyRole.value`), or null while its sensor is offline.
+    /// convention (`EnergyRole.value`), or null while its sensor is offline or its platform
+    /// cannot be reached. Lamps and ACs are left out when no platform answered (they keep what
+    /// they showed); energy readings are not, so an outage never leaves old ones on screen.
     private func pollServices() async -> [String: Any]? {
         let wanted = linkedIds
         var readings: [String: [String: DeviceReading]] = [:]
@@ -231,7 +234,12 @@ public final class DeviceHub {
             readings[serviceId] = result
             answered = true
         }
-        guard answered else { return nil }
+        var energy: [String: Any] = [:]
+        for (role, sensor) in energyLinks {
+            let value = readings[sensor.service]?[sensor.id].flatMap { role.value($0, invert: sensor.invert) }
+            energy[role.rawValue] = value ?? NSNull()
+        }
+        guard answered else { return energyLinks.isEmpty ? nil : ["energy": energy] }
         var lights: [String: Any] = [:], acs: [String: Any] = [:], features: [String: Any] = [:]
         for (id, link) in serviceLinks {
             let reading = readings[link.service]?[link.id]
@@ -245,11 +253,6 @@ public final class DeviceHub {
         }
         for (id, sensor) in tuyaSensors {
             if let t = readings[sensor.service]?[sensor.id]?.temperature { acs[id] = ["roomTemp": t] }
-        }
-        var energy: [String: Any] = [:]
-        for (role, sensor) in energyLinks {
-            let value = readings[sensor.service]?[sensor.id].flatMap { role.value($0, invert: sensor.invert) }
-            energy[role.rawValue] = value ?? NSNull()
         }
         var out: [String: Any] = ["lights": lights, "acs": acs, "features": features]
         if !energyLinks.isEmpty { out["energy"] = energy }
