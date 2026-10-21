@@ -6,7 +6,7 @@ discovery, speaks the real protocol and prints every command it receives.
 
 | Command | What it is |
 | --- | --- |
-| `./tools/lab/homeassistant.sh` | A real Home Assistant (installed into `tools/lab/.ha` on first run, about 1 GB) with its demo devices: lights with every colour mode, three climate devices, fans, a thermometer. Prints the address and an access token |
+| `./tools/lab/homeassistant.sh` | A real Home Assistant (installed into `tools/lab/.ha` on first run, about 1 GB) with its demo devices: lights with every colour mode, three climate devices, fans, a thermometer, and solar panels with a home battery (see below). Prints the address and an access token |
 | `cd tools/lab && npm install && npm run hue` | A Philips Hue Bridge emulator: five lamps (colour, white ambiance, dimmable, a plug) in three rooms, a motion sensor with a thermometer. Press Enter to "press" the link button, or start it with `npm run hue -- --auto` |
 | `cd tools/lab && npm run homekit` | A HomeKit bridge with lamps, a plug, two air conditioners and a thermometer, built on [HAP-NodeJS](https://github.com/homebridge/HAP-NodeJS). Add it in the Home app on your iPhone with **+ → Add Accessory → More options… → House Control Lab**, setup code **031-45-154** |
 
@@ -32,17 +32,38 @@ Apple Home needs a real iPhone: the iOS Simulator grants HomeKit access but cann
 iCloud account. Add the lab's HomeKit bridge to your Home app, then **Settings → More connections → Apple Home**
 in House Control on the phone.
 
+## Solar panels and a home battery
+
+The lab Home Assistant has sensors named and signed like those of the Fronius integration (a Symo GEN24 with a BYD
+battery), driven by four sliders: **Settings → Devices & services → Helpers → Lab solar production**, **Lab house
+consumption**, **Lab battery** (positive while discharging) and **Lab battery charge**. The grid sensor makes up
+the difference, negative while exporting; *PV power* reports the panels in kW, as some other integrations do.
+
+1. In **Edit Home → Solar & battery**, add panels on the roof and a battery, then link the sensors:
+   *SolarNet Power photovoltaics* (solar production), *SolarNet Power grid*, *SolarNet Power load* (house
+   consumption), *SolarNet Power battery* and *BYD Battery-Box Premium HV State of charge*. **Save & apply**.
+2. Move a slider in Home Assistant: the panels, the battery and the lines in the 3D view follow within a second or
+   two (the change arrives over the WebSocket; the panel also reads every 12 seconds while it is open).
+
+From a script, `input_number.set_value` does the same:
+
+```bash
+curl -X POST -H "Authorization: Bearer $(cat tools/lab/.ha/token)" -H "Content-Type: application/json" \
+  -d '{"entity_id": "input_number.lab_solar", "value": 5200}' http://127.0.0.1:8123/api/services/input_number/set_value
+```
+
 ## Automated tests
 
-The unit tests cover the translation to and from each platform and the hub's routing. Two more run against the lab:
+The unit tests cover the translation to and from each platform and the hub's routing. Three more run against the lab:
 
 ```bash
 cd core
 HOUSE_TEST_HA_URL=http://127.0.0.1:8123 HOUSE_TEST_HA_TOKEN=$(cat ../tools/lab/.ha/token) \
-HOUSE_TEST_HUE_HOST=localhost:8443 swift test --filter ServiceTests
+HOUSE_TEST_HUE_HOST=localhost:8443 swift test --filter 'ServiceTests|LiveEnergyTests'
 ```
 
-The Hue test expects the emulator started with `--auto`.
+The Hue test expects the emulator started with `--auto`. `LiveEnergyTests` lists the solar sensors, moves the solar
+slider and waits for the change to arrive over the WebSocket.
 
 ## Your real Tuya devices, through the lab
 

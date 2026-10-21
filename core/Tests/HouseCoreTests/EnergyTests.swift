@@ -197,6 +197,49 @@ struct EnergyTests {
     }
 }
 
+/// The lab's Home Assistant (tools/lab/homeassistant.sh), with its pretend Fronius sensors:
+/// listed, read, and changes arriving over the WebSocket. Runs with `HOUSE_TEST_HA_URL` and
+/// `HOUSE_TEST_HA_TOKEN` set.
+@MainActor
+struct LiveEnergyTests {
+    static let env = ProcessInfo.processInfo.environment
+
+    @Test(.enabled(if: env["HOUSE_TEST_HA_URL"] != nil && env["HOUSE_TEST_HA_TOKEN"] != nil))
+    func theLabsSolarSensorsAreListedReadAndWatched() async throws {
+        let url = try #require(Self.env["HOUSE_TEST_HA_URL"]), token = try #require(Self.env["HOUSE_TEST_HA_TOKEN"])
+        let service = HomeAssistantService(vault: MemorySecretStore())
+        try await service.connect(url: url, token: token)
+        defer { service.disconnect() }
+        let devices = try await service.devices()
+        let solar = "sensor.solarnet_power_photovoltaics", soc = "sensor.byd_battery_box_premium_hv_state_of_charge"
+        #expect(devices.first { $0.id == solar }?.kind == .power)
+        #expect(devices.first { $0.id == soc }?.kind == .battery)
+        #expect(devices.first { $0.id == "sensor.pv_power" }?.detail == "power sensor · kW")
+
+        func setSolar(_ watts: Int) async throws {
+            var request = URLRequest(url: try #require(URL(string: url + "/api/services/input_number/set_value")))
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: ["entity_id": "input_number.lab_solar", "value": watts])
+            _ = try await URLSession.shared.data(for: request)
+        }
+        try await setSolar(2500)
+        var changes = 0
+        service.onChange = { changes += 1 }
+        service.watch([solar])
+        try await Task.sleep(nanoseconds: 1_500_000_000) // the WebSocket subscribes
+        try await setSolar(4100)
+        for _ in 0..<50 where changes == 0 { try await Task.sleep(nanoseconds: 100_000_000) }
+        #expect(changes > 0, "a change of a watched sensor arrives over the WebSocket")
+        let readings = try await service.read([solar, "sensor.pv_power", soc, "sensor.solarnet_power_load"])
+        #expect(readings[solar]?.power == 4100)
+        #expect(abs((readings["sensor.pv_power"]?.power ?? 0) - 4100) < 0.01) // 4.1 kW
+        #expect(readings[soc]?.batteryLevel != nil)
+        #expect(EnergyRole.load.value(try #require(readings["sensor.solarnet_power_load"])) ?? -1 >= 0)
+    }
+}
+
 /// A platform whose meters report a fixed power flow; the charge sensor is offline.
 private final class MeterService: DeviceService {
     let id = "homekit"
