@@ -45,7 +45,10 @@ final class ServiceTests: XCTestCase {
         XCTAssertEqual(HomeAssistantService.device(from: [
             "entity_id": "sensor.outside", "state": "15.6", "attributes": ["unit_of_measurement": "°C"],
         ])?.kind, .sensor)
-        XCTAssertNil(HomeAssistantService.device(from: ["entity_id": "sensor.power", "state": "3", "attributes": ["unit_of_measurement": "W"]]))
+        XCTAssertEqual(HomeAssistantService.device(from: [
+            "entity_id": "sensor.power", "state": "3", "attributes": ["unit_of_measurement": "W"],
+        ])?.kind, .power) // see EnergyTests
+        XCTAssertNil(HomeAssistantService.device(from: ["entity_id": "sensor.humidity", "state": "40", "attributes": ["unit_of_measurement": "%"]]))
         XCTAssertNil(HomeAssistantService.device(from: ["entity_id": "media_player.tv", "state": "on", "attributes": [:]]))
     }
 

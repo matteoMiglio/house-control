@@ -98,6 +98,9 @@ public struct PlanEditor {
             if let link = item.link { out[link] = item.name }
             if let sensor = item.sensor { out[sensor] = "\(item.name) · room" }
         }
+        for (role, sensor) in HomeConfig.Energy(plan["energy"])?.sensors ?? [:] {
+            out[DeviceRef(service: sensor.service, id: sensor.id)] = role.title
+        }
         return out
     }
 

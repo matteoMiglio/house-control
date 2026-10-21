@@ -1,7 +1,7 @@
 import Foundation
 
-/// What a floor plan says about the things that can be controlled: rooms, lamps, ACs, scenes
-/// and cameras, with the defaults web/src/config.js `normalize()` fills in. Read by the native
+/// What a floor plan says about the things that can be controlled: rooms, lamps, ACs, scenes,
+/// cameras and the energy section, with the defaults web/src/config.js `normalize()` fills in. Read by the native
 /// controls; the 3D view still reads the plan itself.
 public struct HomeConfig: Equatable, Sendable {
     public struct Group: Identifiable, Equatable, Sendable {
@@ -44,6 +44,8 @@ public struct HomeConfig: Equatable, Sendable {
     public let lights: [Light]
     public let acs: [AC]
     public let scenes: [Scene]
+    /// Solar panels, a home battery and their sensors (see Energy.swift); nil without them.
+    public let energy: Energy?
 
     public init(plan: [String: Any]) {
         func text(_ value: Any?) -> String? { (value as? String).flatMap { $0.isEmpty ? nil : $0 } }
@@ -75,6 +77,7 @@ public struct HomeConfig: Equatable, Sendable {
             guard let id = s["id"] as? String, !id.isEmpty else { return nil }
             return Scene(id: id, name: text(s["name"]) ?? id, icon: text(s["icon"]) ?? "sun")
         })
+        energy = Energy(plan["energy"])
         // A plan may have a room of its own called "outside": then that room is meant.
         let outsideIsArea = !rooms.contains { $0.id == Self.outsideId }
         let lights = lights
@@ -167,4 +170,6 @@ public extension HomeStore {
     func lightState(_ id: String) -> LightState { lights[id].map(LightState.init) ?? LightState() }
     func acState(_ id: String) -> ACState { acs[id].map(ACState.init) ?? ACState() }
     func acFeatures(_ id: String) -> ACFeatures { ACFeatures(features[id]) }
+    /// The power flow right now: what the energy sensors report, or the simulation.
+    var energyState: EnergyState { EnergyState(energy) }
 }

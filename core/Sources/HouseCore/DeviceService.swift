@@ -37,7 +37,9 @@ public extension DeviceService {
 }
 
 public enum DeviceKind: String {
-    case light, ac, sensor
+    /// `sensor` is a thermometer; `power` a power meter (solar, grid, battery, house) and
+    /// `battery` a battery's state of charge, for a plan's energy section.
+    case light, ac, sensor, power, battery
 
     /// A lamp the panel shows as on, given a new brightness or colour, is switched on as well:
     /// the real one may be off (switched off elsewhere since the last read), and some
@@ -87,14 +89,20 @@ public struct DeviceReading {
     public var features: [String: Any]?
     /// A temperature sensor's reading in °C.
     public var temperature: Double?
+    /// A power sensor's reading in W, signed as the sensor reports it.
+    public var power: Double?
+    /// A battery level in %.
+    public var batteryLevel: Double?
     public var online = true
 
     public init(light: [String: Any]? = nil, ac: [String: Any]? = nil, features: [String: Any]? = nil,
-                temperature: Double? = nil, online: Bool = true) {
+                temperature: Double? = nil, power: Double? = nil, batteryLevel: Double? = nil, online: Bool = true) {
         self.light = light
         self.ac = ac
         self.features = features
         self.temperature = temperature
+        self.power = power
+        self.batteryLevel = batteryLevel
         self.online = online
     }
 }

@@ -31,6 +31,8 @@ public final class DeviceHub {
     private var serviceLinks: [String: Link] = [:]
     /// Sensors from other platforms that report the room of a Smart Life AC.
     private var tuyaSensors: [String: (service: String, id: String)] = [:]
+    /// The sensors of the plan's energy section, by what they report.
+    private var energyLinks: [EnergyRole: HomeConfig.Energy.Sensor] = [:]
     private var refresh: Task<Void, Never>?
     /// The command in flight for each real device; the next one waits for it.
     private var commandTails: [String: Task<Void, Never>] = [:]
@@ -74,8 +76,9 @@ public final class DeviceHub {
     public var hasLinks: Bool { !links.isEmpty || !serviceLinks.isEmpty }
     /// True when there is something to read at all.
     public var canPoll: Bool {
-        (connectedCloud != nil && !links.isEmpty)
-            || serviceLinks.values.contains { service($0.service).map { $0.isConnected && $0.controlsDevices } ?? false }
+        (connectedCloud != nil && !links.isEmpty) || linkedIds.keys.contains { id in
+            service(id).map { $0.isConnected && $0.controlsDevices } ?? false
+        }
     }
     public var linkedDeviceCount: Int { links.count + serviceLinks.values.filter { !$0.id.isEmpty }.count }
 
@@ -84,8 +87,10 @@ public final class DeviceHub {
         links = [:]
         serviceLinks = [:]
         tuyaSensors = [:]
+        energyLinks = [:]
         defer { watchLinks() }
         guard let plan else { return }
+        energyLinks = HomeConfig.Energy(plan["energy"])?.sensors ?? [:]
         for (kind, key) in [("light", "lights"), ("ac", "acs")] {
             for device in plan[key] as? [[String: Any]] ?? [] {
                 guard let id = device["id"] as? String else { continue }
@@ -112,14 +117,21 @@ public final class DeviceHub {
         return (service, id)
     }
 
-    /// Tells each platform which of its devices the plan uses, for its live updates.
-    private func watchLinks() {
+    /// The devices of the other platforms the plan uses, by platform.
+    private var linkedIds: [String: Set<String>] {
         var ids: [String: Set<String>] = [:]
         for link in serviceLinks.values {
             if !link.id.isEmpty { ids[link.service, default: []].insert(link.id) }
             if let sensor = link.sensor { ids[sensor.service, default: []].insert(sensor.id) }
         }
         for sensor in tuyaSensors.values { ids[sensor.service, default: []].insert(sensor.id) }
+        for sensor in energyLinks.values { ids[sensor.service, default: []].insert(sensor.id) }
+        return ids
+    }
+
+    /// Tells each platform which of its devices the plan uses, for its live updates.
+    private func watchLinks() {
+        let ids = linkedIds
         for service in services { service.watch(ids[service.id] ?? []) }
     }
 
@@ -202,17 +214,15 @@ public final class DeviceHub {
             }
             merged[key] = section
         }
+        if let energy = fromServices?["energy"] { merged["energy"] = energy }
         return merged
     }
 
     /// Home Assistant, Hue and Apple Home, each asked once for all of its linked devices.
+    /// `energy` has every linked role of the energy section: its value in the panel's
+    /// convention (`EnergyRole.value`), or null while its sensor is offline.
     private func pollServices() async -> [String: Any]? {
-        var wanted: [String: Set<String>] = [:]
-        for link in serviceLinks.values {
-            if !link.id.isEmpty { wanted[link.service, default: []].insert(link.id) }
-            if let sensor = link.sensor { wanted[sensor.service, default: []].insert(sensor.id) }
-        }
-        for sensor in tuyaSensors.values { wanted[sensor.service, default: []].insert(sensor.id) }
+        let wanted = linkedIds
         var readings: [String: [String: DeviceReading]] = [:]
         var answered = false
         for (serviceId, ids) in wanted {
@@ -236,7 +246,14 @@ public final class DeviceHub {
         for (id, sensor) in tuyaSensors {
             if let t = readings[sensor.service]?[sensor.id]?.temperature { acs[id] = ["roomTemp": t] }
         }
-        return ["lights": lights, "acs": acs, "features": features]
+        var energy: [String: Any] = [:]
+        for (role, sensor) in energyLinks {
+            let value = readings[sensor.service]?[sensor.id].flatMap { role.value($0, invert: sensor.invert) }
+            energy[role.rawValue] = value ?? NSNull()
+        }
+        var out: [String: Any] = ["lights": lights, "acs": acs, "features": features]
+        if !energyLinks.isEmpty { out["energy"] = energy }
+        return out
     }
 
     private func pollCloud() async -> [String: Any]? {

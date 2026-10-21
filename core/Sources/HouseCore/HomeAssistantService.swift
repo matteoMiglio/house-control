@@ -2,8 +2,10 @@ import Foundation
 
 /// A Home Assistant server on the local network (or anywhere it is reachable), through its
 /// REST API with a long-lived access token. Lights and switches become lamps, `climate`
-/// entities become air conditioners and temperature sensors can stand in for an AC's room
-/// reading. A WebSocket subscription tells the hub the moment something changes.
+/// entities become air conditioners, temperature sensors can stand in for an AC's room
+/// reading, and power and battery-level sensors (solar, grid, a home battery) report the
+/// power flow of a plan's energy section. A WebSocket subscription tells the hub the moment
+/// something changes.
 @MainActor
 public final class HomeAssistantService: DeviceService {
     public let id = "homeassistant"
@@ -176,9 +178,19 @@ public final class HomeAssistantService: DeviceService {
             }
             device.detail = "climate · " + (attributes["hvac_modes"] as? [String] ?? []).joined(separator: ", ")
         case "sensor":
-            guard isTemperature(attributes) else { return nil }
-            device = ServiceDevice(id: id, name: name, kind: .sensor)
-            device.detail = "temperature sensor"
+            let unit = attributes["unit_of_measurement"] as? String
+            if isTemperature(attributes) {
+                device = ServiceDevice(id: id, name: name, kind: .sensor)
+                device.detail = "temperature sensor"
+            } else if wattsPer(unit) != nil {
+                device = ServiceDevice(id: id, name: name, kind: .power)
+                device.detail = "power sensor · \(unit ?? "W")"
+            } else if isBatteryLevel(attributes) {
+                device = ServiceDevice(id: id, name: name, kind: .battery)
+                device.detail = "battery level"
+            } else {
+                return nil
+            }
         default:
             return nil
         }
@@ -197,6 +209,23 @@ public final class HomeAssistantService: DeviceService {
     static func isTemperature(_ attributes: [String: Any]) -> Bool {
         (attributes["device_class"] as? String) == "temperature"
             || ["°C", "°F"].contains(attributes["unit_of_measurement"] as? String ?? "")
+    }
+
+    /// Watts in one of a power sensor's units ("kW" → 1000); nil for a sensor that measures
+    /// something else (an energy total in kWh, a current in A).
+    static func wattsPer(_ unit: String?) -> Double? {
+        switch unit {
+        case "mW": return 0.001
+        case "W": return 1
+        case "kW": return 1_000
+        case "MW": return 1_000_000
+        default: return nil
+        }
+    }
+
+    /// A state of charge in %: a home battery's, or a phone's, or a remote's (they look alike).
+    static func isBatteryLevel(_ attributes: [String: Any]) -> Bool {
+        (attributes["device_class"] as? String) == "battery" && (attributes["unit_of_measurement"] as? String ?? "%") == "%"
     }
 
     /// The panel's AC modes and the climate entity's names for them.
@@ -255,8 +284,15 @@ public final class HomeAssistantService: DeviceService {
                 "swing": swings.contains("off") && swings.count > 1,
                 "sleep": presets.contains("sleep"), "eco": presets.contains("eco"),
             ]
-        } else if id.hasPrefix("sensor."), let t = Double(value) {
-            reading.temperature = (attributes["unit_of_measurement"] as? String) == "°F" ? (t - 32) * 5 / 9 : t
+        } else if id.hasPrefix("sensor."), let v = Double(value), v.isFinite {
+            let unit = attributes["unit_of_measurement"] as? String
+            if let watts = wattsPer(unit) {
+                reading.power = v * watts
+            } else if isBatteryLevel(attributes) {
+                reading.batteryLevel = v
+            } else {
+                reading.temperature = unit == "°F" ? (v - 32) * 5 / 9 : v
+            }
         }
         return reading
     }

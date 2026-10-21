@@ -24,6 +24,9 @@ public final class HomeStore {
     public private(set) var acs: [String: [String: JSONValue]] = [:]
     /// What each real AC can do, as its platform reports it.
     public private(set) var features: [String: JSONValue] = [:]
+    /// The power flow of the plan's energy section (`EnergyState`): read from its sensors, or
+    /// simulated when it has none. Shown, never saved.
+    public private(set) var energy: [String: JSONValue] = [:]
     /// The scene the home is in, until something is changed by hand.
     public private(set) var scene: String?
     /// True when the state was read back from disk (or taken from a page that had it saved).
@@ -49,6 +52,8 @@ public final class HomeStore {
     private let transmit: Transmit?
     private var saveTask: Task<Void, Never>?
     private var simulation: Timer?
+    private var energySimulation: EnergySimulation?
+    private var energyStepped: Date?
     /// Replaced by the store of another plan: it sends, saves and tells nothing any more.
     private var retired = false
     /// A retired store still finishing the commands it had started (see `retire`).
@@ -96,6 +101,7 @@ public final class HomeStore {
         }
         self.file = file
         self.transmit = transmit
+        energySimulation = EnergySimulation(plan: plan)
 
         for l in rawLights {
             guard let id = l["id"] as? String else { continue }
@@ -111,6 +117,7 @@ public final class HomeStore {
            let saved = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             restore(saved)
         }
+        _ = simulateEnergy()
     }
 
     // MARK: - Reading
@@ -118,7 +125,7 @@ public final class HomeStore {
     /// Everything a page needs to draw the home, in the shape `web/src/store.js` keeps.
     public var json: [String: Any] {
         ["lights": lights.mapValues { $0.mapValues(\.any) }, "acs": acs.mapValues { $0.mapValues(\.any) },
-         "features": features.mapValues(\.any), "scene": (scene as Any?) ?? NSNull()]
+         "features": features.mapValues(\.any), "scene": (scene as Any?) ?? NSNull(), "energy": energy.mapValues(\.any)]
     }
 
     /// For the menu bar icon: how many lamps are on, and the first running AC.
@@ -210,7 +217,8 @@ public final class HomeStore {
         }
     }
 
-    /// State the real devices reported. Never sent back to them as a command.
+    /// State the real devices reported. Never sent back to them as a command. A new reading of
+    /// the energy sensors alone is a `tick`: it moves the 3D view, nothing else.
     public func applyRemote(_ update: [String: Any]) {
         if !restored {
             for key in ["lights", "acs", "features"] {
@@ -220,7 +228,21 @@ public final class HomeStore {
                 }
             }
         }
-        if adopt(update) { emit(nil, local: false) }
+        let energyMoved = adoptEnergy(update["energy"])
+        if adopt(update) { emit(nil, local: false) } else if energyMoved { onChange?(Change(source: nil, tick: true)) }
+    }
+
+    /// Takes the energy sensors' readings: a role whose sensor is offline becomes unknown.
+    private func adoptEnergy(_ value: Any?) -> Bool {
+        guard let readings = value as? [String: Any] else { return false }
+        var next = energy
+        for role in EnergyRole.allCases {
+            guard let reading = readings[role.rawValue] else { continue }
+            next[role.rawValue] = (reading as? NSNumber).map { .number($0.doubleValue) } ?? .null
+        }
+        guard next != energy else { return false }
+        energy = next
+        return true
     }
 
     /// State another device already made true (a widget that reached the lamp itself):
@@ -315,9 +337,24 @@ public final class HomeStore {
             acs[id] = ac
             any = true
         }
+        let saved = any
+        if simulateEnergy() { any = true }
         guard any else { return }
         onChange?(Change(source: nil, tick: true))
-        scheduleSave()
+        if saved { scheduleSave() }
+    }
+
+    /// The next step of a simulated power flow, for a plan with panels or a battery but no sensors.
+    func simulateEnergy(at now: Date = Date()) -> Bool {
+        guard var sim = energySimulation else { return false }
+        let seconds = energyStepped.map { Swift.min(60, now.timeIntervalSince($0)) } ?? 0
+        energyStepped = now
+        let state = sim.step(at: now.timeIntervalSince1970, seconds: seconds)
+        energySimulation = sim
+        let next = state.json
+        guard next != energy else { return false }
+        energy = next
+        return true
     }
 
     // MARK: - Writing
@@ -423,6 +460,7 @@ public final class HomeStore {
         saveTask?.cancel()
         var out = json
         out["home"] = name
+        out["energy"] = nil
         guard let data = try? JSONSerialization.data(withJSONObject: out, options: [.sortedKeys]) else { return }
         try? data.write(to: file, options: .atomic)
     }
