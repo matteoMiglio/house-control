@@ -5,6 +5,12 @@ What changed in each release of House Control. The Mac app is on
 
 ## Unreleased
 
+### A shorter menu
+
+- **The menu bar icon's menu and the island's gear** keep what you reach for: Open House Control, Edit Home, AI
+  Access, Pair iPhone, Settings and Quit. The floor plan files, the device log, Open at Login, the island and About
+  are in Settings. Hold ⌥ for **Reload House Control**. The panel's gear menu loses the same items.
+
 ### Solar panels and a home battery
 
 - **Your solar system in 3D:** panels on the roof that light up with what they make, a home battery whose front
@@ -49,7 +55,7 @@ What changed in each release of House Control. The Mac app is on
 - **The island says when everything is off:** a dimmed house and *Off*, instead of hiding behind the notch. On a
   display without a notch it still steps out of the menu bar then, rather than cover the menu bar items.
 - The island now shows the same controls as the panel for real air conditioners, and follows what the widgets change.
-- **The island or the menu bar icon, not both:** the island is off at first. With it on (Settings, or the app's menu), the menu bar icon
+- **The island or the menu bar icon, not both:** the island is off at first. With it on (Settings), the menu bar icon
   goes away and the open island's gear holds the app's menu; turn the island off and the icon comes back. The island
   is native now too, around the same 3D model.
 - **On the Mac the controls are native:** the header, scenes, rooms, device tiles, the lamp, AC and camera sheets
@@ -88,7 +94,7 @@ What changed in each release of House Control. The Mac app is on
 
 ### Mac
 
-- **Open at Login**, in the menu bar icon's right-click menu and in the panel's gear menu: House Control starts with
+- **Open at Login**, in Settings: House Control starts with
   your Mac. It is the app's entry under System Settings → General → Login Items, so it can be switched off there too.
   Run from the disk image, the app asks to be moved to Applications first; moved there later, the login item follows it.
 

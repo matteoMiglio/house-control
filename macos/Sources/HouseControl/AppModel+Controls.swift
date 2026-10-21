@@ -56,16 +56,7 @@ extension AppModel {
         menu.addItem(ClosureMenuItem("Open House Control…") { [weak self] in self?.router.show(.home) })
         menu.addItem(ClosureMenuItem("Edit Home…") { [weak self] in self?.router.show(.editor) })
         menu.addItem(ClosureMenuItem("AI Access…") { [weak self] in self?.router.show(.agent) })
-        menu.addItem(ClosureMenuItem("Load Floor Plan…") { [weak self] in self?.loadPlan() })
-        menu.addItem(ClosureMenuItem("Reveal Plan File") { [weak self] in self?.revealPlan() })
         menu.addItem(.separator())
-        loginState = LoginItem.state
-        let login = loginState
-        let item = ClosureMenuItem(login == .needsApproval ? "Open at Login — Allow in Settings…" : "Open at Login") { [weak self] in
-            self?.setOpenAtLogin(login != .on)
-        }
-        item.state = login == .on ? .on : login == .needsApproval ? .mixed : .off
-        menu.addItem(item)
         menu.addItem(ClosureMenuItem("Settings…") { [weak self] in self?.router.show(.settings) })
         menu.addItem(ClosureMenuItem("Quit House Control") { NSApp.terminate(nil) })
         menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)

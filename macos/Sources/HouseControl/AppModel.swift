@@ -320,37 +320,27 @@ final class AppModel: NSObject {
     func appMenu() -> NSMenu {
         let menu = NSMenu()
         menu.addItem(withTitle: "Open House Control", action: #selector(requestHome), keyEquivalent: "").target = self
+        // Held with ⌥: reload the pages and the device links.
+        let reload = menu.addItem(withTitle: "Reload House Control", action: #selector(reloadAll), keyEquivalent: "")
+        reload.target = self
+        reload.keyEquivalentModifierMask = .option
+        reload.isAlternate = true
         menu.addItem(.separator())
         menu.addItem(withTitle: "Edit Home…", action: #selector(requestEditor), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Load Floor Plan…", action: #selector(loadPlan), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Reveal Plan File", action: #selector(revealPlan), keyEquivalent: "").target = self
-        menu.addItem(withTitle: "Reveal Device Log", action: #selector(revealLog), keyEquivalent: "").target = self
-        menu.addItem(.separator())
-        let islandItem = menu.addItem(withTitle: "Use the Island Instead of the Menu Bar Icon", action: #selector(toggleIsland), keyEquivalent: "")
-        islandItem.target = self
-        islandItem.state = island?.isShown == true ? .on : .off
-        loginState = LoginItem.state
-        let login = loginState
-        let loginItem = menu.addItem(withTitle: login == .needsApproval ? "Open at Login — Allow in Settings…" : "Open at Login",
-                                     action: #selector(toggleOpenAtLogin), keyEquivalent: "")
-        loginItem.target = self
-        loginItem.state = login == .on ? .on : login == .needsApproval ? .mixed : .off
-        menu.addItem(withTitle: "Pair iPhone…", action: #selector(requestPairing), keyEquivalent: "").target = self
         let aiItem = menu.addItem(withTitle: agent.isLive ? "AI Access — Live" : "AI Access…", action: #selector(requestAgent), keyEquivalent: "")
         aiItem.target = self
         aiItem.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: nil)
         if agent.isLive {
             menu.addItem(withTitle: "Stop AI Access", action: #selector(stopAgent), keyEquivalent: "").target = self
         }
+        menu.addItem(withTitle: "Pair iPhone…", action: #selector(requestPairing), keyEquivalent: "").target = self
         connectedDevices = sync.connectedDevices
         for device in connectedDevices {
             let item = menu.addItem(withTitle: "\(device) is connected", action: nil, keyEquivalent: "")
             item.image = NSImage(systemSymbolName: "iphone", accessibilityDescription: nil)
         }
         menu.addItem(.separator())
-        menu.addItem(aboutMenuItem())
         menu.addItem(withTitle: "Settings…", action: #selector(requestSettings), keyEquivalent: ",").target = self
-        menu.addItem(withTitle: "Reload", action: #selector(reloadAll), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Quit House Control", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         return menu
     }
@@ -429,37 +419,6 @@ final class AppModel: NSObject {
     @objc func revealPlan() {
         let url = plans.hasCustomPlan ? plans.customPlanURL : WebHost.assetRoot.appendingPathComponent("plans/\(plans.activePlan).json")
         NSWorkspace.shared.activateFileViewerSelecting([url])
-    }
-
-    /// "About House Control": the version, the website and where to find the developer.
-    private func aboutMenuItem() -> NSMenuItem {
-        let about = NSMenu()
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-        about.addItem(withTitle: "House Control\(version.map { " \($0)" } ?? "")", action: nil, keyEquivalent: "")
-        about.addItem(.separator())
-        let links: [(String, String, URL)] = [
-            ("Website", "globe", About.website),
-            ("Privacy Policy", "hand.raised", About.privacy),
-            ("Support", "questionmark.circle", About.support),
-            ("", "", About.website),
-            ("\(About.developer) on X", "at", About.x),
-            ("\(About.developer) on GitHub", "chevron.left.forwardslash.chevron.right", About.github),
-            ("Source Code", "shippingbox", About.source),
-        ]
-        for (title, symbol, url) in links {
-            guard !title.isEmpty else { about.addItem(.separator()); continue }
-            let item = about.addItem(withTitle: title, action: #selector(openLink(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = url
-            item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-        }
-        let item = NSMenuItem(title: "About House Control", action: nil, keyEquivalent: "")
-        item.submenu = about
-        return item
-    }
-
-    @objc private func openLink(_ sender: NSMenuItem) {
-        if let url = sender.representedObject as? URL { NSWorkspace.shared.open(url) }
     }
 
     @objc func revealLog() {
@@ -546,8 +505,6 @@ final class AppModel: NSObject {
         updateStatusItem()
     }
 
-    @objc private func toggleIsland() { setIsland(island?.isShown != true) }
-
     func setIsland(_ show: Bool) {
         // A run with its own data folder (HOUSE_DATA_DIR, for tests) leaves the real setting alone.
         if ProcessInfo.processInfo.environment["HOUSE_DATA_DIR"] == nil { UserDefaults.standard.set(show, forKey: "island") }
@@ -572,8 +529,6 @@ final class AppModel: NSObject {
     // MARK: - Open at Login
 
     /// Waiting for approval counts as off: choosing it again takes the user to System Settings.
-    @objc private func toggleOpenAtLogin() { setOpenAtLogin(LoginItem.state != .on) }
-
     func setOpenAtLogin(_ on: Bool) {
         if on, LoginItem.isTemporaryCopy {
             alert("Move House Control to Applications first",

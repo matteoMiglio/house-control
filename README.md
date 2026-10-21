@@ -125,7 +125,7 @@ macOS does not ask for the Local Network permission after every build:
 `CODESIGN_IDENTITY="Apple Development: you@example.com (ABCDE12345)" ./scripts/build-app.sh`.
 
 To keep it, drag `build/HouseControl.app` into `/Applications`. To start it with your Mac, turn on **Open at
-Login** in Settings (⌘,), the menu bar icon's right-click menu or the panel's gear menu; it shows up under
+Login** in Settings (⌘,); it shows up under
 **System Settings → General → Login Items**, where it can be switched off too.
 
 House Control is a menu bar app: it has a Dock icon only while its window is open. Closing them keeps it running in the menu bar — the panel, the island, iPhone sync and AI Access
@@ -136,7 +136,7 @@ go on; **Quit** in the menu bar icon's menu (or ⌘Q in a window) ends it.
 | Do this | To get this |
 | --- | --- |
 | Click the menu bar icon | Open or close the panel |
-| Right-click the menu bar icon | Open House Control, Edit Home, Load Floor Plan, Reveal Plan File, Reveal Device Log, Show Island, Open at Login, Pair iPhone, AI Access, Settings, Reload, Quit |
+| Right-click the menu bar icon (or the island's gear) | Open House Control (hold ⌥ to reload it), Edit Home, AI Access, Pair iPhone, Settings, Quit |
 | In the window's sidebar | Home, Edit Home, Connections, AI Access, Pair iPhone, Settings |
 | In the editor's plan | Pinch (or ⌘-scroll) to zoom, scroll or drag with Space held to move around, ⌘0 for the whole plan |
 | Click a lamp in the 3D view, or its tile | Toggle it |
@@ -174,8 +174,7 @@ A black tab grows out of the MacBook's notch. On a display without a notch it is
 
 When something changes elsewhere — a scene picked in the panel, a lamp switched from the phone — the island
 peeks out for a moment to say what happened. It never takes the keyboard from the app you are working in.
-It is off at first: turn it on in **Settings**, or with **Use the Island Instead of the Menu Bar Icon** in the
-menu bar icon's right-click menu. While it is on, the menu bar icon steps aside and the island's gear holds the menu.
+It is off at first: turn it on in **Settings**. While it is on, the menu bar icon steps aside and the island's gear holds the menu.
 
 ## AI Access
 
