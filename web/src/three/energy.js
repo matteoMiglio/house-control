@@ -229,15 +229,16 @@ export class EnergyUnit {
       this.group.add(this.battery.group);
     }
 
-    // Where the lines meet: the middle of the biggest room (the house), the panels nearest to
-    // it, the front of the battery, and the grid, out past the far wall nearest the house's point.
-    const room = [...config.rooms].sort((p, q) => q.w * q.d - p.w * p.d)[0];
-    const house = new THREE.Vector3(room.x + room.w / 2, 0.04, room.z + room.d / 2);
+    // Where the lines meet: the house as a whole (one point over the middle of it, just clear
+    // of the cut-down inner walls: the power goes to the house, never to a room or a device),
+    // the panels nearest to it, the front of the battery, and the grid, out past the far wall
+    // nearest that point.
+    const { minX, minZ, maxX, maxZ } = config.bounds;
+    const house = new THREE.Vector3((minX + maxX) / 2, Math.min(config.interiorWallHeight ?? 1.25, H) + 0.2, (minZ + maxZ) / 2);
     this.house = house;
     const roof = this.arrays.map((a) => a.top).sort((p, q) => p.distanceTo(house) - q.distanceTo(house))[0] || null;
     const front = b && new THREE.Vector3(b.pos[0], 0.55, b.pos[1])
       .add(new THREE.Vector3(0, 0, 0.14).applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(b.rot || 0)));
-    const { minX, minZ, maxX, maxZ } = config.bounds;
     const sides = [
       { n: [-1, 0], at: () => new THREE.Vector3(minX - 1.8, 0.05, house.z), d: house.x - minX },
       { n: [1, 0], at: () => new THREE.Vector3(maxX + 1.8, 0.05, house.z), d: maxX - house.x },
@@ -251,16 +252,16 @@ export class EnergyUnit {
       roofHouse: roof && new FlowLine(arc(roof, house, 0.1)),
       roofBattery: roof && front && new FlowLine(arc(roof, front, 0.1)),
       batteryHouse: front && new FlowLine(arc(front, house, 0.25)),
-      gridHouse: new FlowLine(new THREE.LineCurve3(grid, new THREE.Vector3(house.x, 0.05, house.z))),
+      gridHouse: new FlowLine(arc(grid, house, 0.12)),
     };
     for (const line of Object.values(this.lines)) if (line) this.group.add(line.group);
 
-    // The house's own use: a faint ring on the floor where the lines meet.
+    // The house's own use: a faint ring where the lines meet.
     this.ringMat = new THREE.MeshBasicMaterial({
       color: '#ffe6c4', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
     });
     this.ring = new THREE.Mesh(new THREE.RingGeometry(0.17, 0.21, 48).rotateX(-Math.PI / 2), this.ringMat);
-    this.ring.position.copy(house).setY(0.03);
+    this.ring.position.copy(house);
     this.group.add(this.ring);
 
     this.level = 0;      // the panels' output, 0…1 of their peak
