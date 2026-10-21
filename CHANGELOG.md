@@ -5,6 +5,21 @@ What changed in each release of House Control. The Mac app is on
 
 ## Unreleased
 
+### Solar panels and a home battery
+
+- **Your solar system in 3D:** panels on the roof that light up with what they make, a home battery whose front
+  shows its charge (with a shimmer running up while it charges), and lines of light carrying the power from the
+  roof to the house and the battery, from the battery to the house and between the house and the grid — thicker
+  and faster the more watts flow, easing smoothly from one reading to the next. Cut open, the panels show as an
+  outline over the rooms.
+- **From any Home Assistant integration:** power sensors in W or kW and battery levels are listed in Connections
+  (Mac and iPhone), and **Edit Home → Solar & battery** places the panels and the battery and links a sensor to
+  each role: solar production, grid, house consumption, battery power and charge, with **Reversed** for a sensor
+  that counts the other way. Built and tested against the Fronius integration's sensors; read-only.
+- The demo home has panels and a battery with a simulated sunny day (six minutes long), and so does any plan
+  until a sensor is linked. The lab Home Assistant (`tools/lab`) has pretend Fronius sensors to try it with.
+- The plan file has a new optional [`energy`](docs/floor-plan.md#energy) section.
+
 ### A window when you need one
 
 - **Open House Control** (in the menu bar icon's menu and the panel's gear menu, or open the app again) gives it a

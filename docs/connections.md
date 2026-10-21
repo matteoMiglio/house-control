@@ -38,8 +38,20 @@ Tuya — so connecting it brings all of them in at once.
 | `switch.*` | A lamp on a plug: on/off |
 | `climate.*` | An air conditioner: power, target, the modes it has (`cool`, `heat`, `dry`, `fan_only`, `auto`/`heat_cool`), its fan speeds, swing, `eco` and `sleep` presets |
 | `sensor.*` with `device_class: temperature` | A thermometer for an AC's room |
+| `sensor.*` in W or kW (`device_class: power`) | A power sensor for the plan's solar panels, battery, grid or house ([`energy`](floor-plan.md#energy)) |
+| `sensor.*` with `device_class: battery` | A battery level: how full the home battery is |
 
-Areas become the room shown next to each device. House Control subscribes to Home Assistant's events, so a
+Areas become the room shown next to each device.
+
+**Solar panels and a home battery** come from whatever integration measures them — Fronius, SolarEdge, Enphase,
+Huawei, a Shelly on the meter — as long as it has power sensors in W or kW and, for a battery, a battery level in
+%. In **Edit Home → Solar & battery**, link one to each role you have (solar production, grid, house consumption,
+battery power, battery charge) and tick **Reversed** for a grid or battery sensor that counts the other way round
+(House Control takes importing and discharging as positive). With Home Assistant's
+[Fronius](https://www.home-assistant.io/integrations/fronius/) integration, use the SolarNet device's *Power photovoltaics*, *Power
+load consumed*, *Power grid* and *Power battery* (enable the last two under the device's entities: they are off
+at first) and the storage's *State of charge*, none of them reversed. Read-only: House Control
+never sends anything to these sensors. House Control subscribes to Home Assistant's events, so a
 lamp switched from a wall switch or an automation shows up in the panel within a second.
 
 **Bring your Tuya devices in without a developer account:** in Home Assistant, **Settings → Devices & services →

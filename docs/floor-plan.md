@@ -220,6 +220,51 @@ Identify first. Then it adjusts each one's aim and place a little. They are show
 all the cameras would see together and the difference they make, until you add them (⌘Z takes them away again)
 or discard them.
 
+## `energy`
+
+Solar panels on the roof, a home battery, and the sensors that report how power flows between them, the house and
+the grid. In 3D the panels light up with what they make, the battery's front shows its charge, and lines of light
+carry the power along: from the roof to the house and the battery, from the battery to the house, between the house
+and the grid. Every part is optional — panels without a battery, a battery and a grid meter without panels…
+
+```jsonc
+"energy": {
+  "peak": 6000,
+  "panels": [
+    { "pos": [2.6, 1.9], "size": [4, 3.4], "rot": 0 },
+    { "pos": [7.9, 1.9], "size": [4, 3.4], "rot": 0 }
+  ],
+  "battery": { "pos": [5.95, 3.77], "room": "living" },
+  "sensors": {
+    "solar":   { "service": "homeassistant", "id": "sensor.solarnet_power_photovoltaics" },
+    "grid":    { "service": "homeassistant", "id": "sensor.solarnet_power_grid" },
+    "load":    { "service": "homeassistant", "id": "sensor.solarnet_power_load" },
+    "battery": { "service": "homeassistant", "id": "sensor.solarnet_power_battery" },
+    "charge":  { "service": "homeassistant", "id": "sensor.byd_battery_box_premium_hv_state_of_charge" }
+  }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `panels` | Arrays of panels on the roof. `pos` is the `[x, z]` of the middle of one, `size` its `[width, depth]` in metres (a module is about 1 × 1.7 m: width across, depth up the slope), `rot` the way it faces, like furniture: `0` south, `90` east |
+| `battery` | `pos` (`[x, z]` of its middle), `room` (the room it stands in; leave it out for a battery outside the house, which then shows in the view from outside only), `rot` (which way its front faces) |
+| `peak` | The output in W at which the panels look their brightest. Without it, the most they have made since the view opened |
+| `sensors` | What reports the power flow, by role — see below |
+
+| Role | A sensor of | Reads |
+| --- | --- | --- |
+| `solar` | power (W, kW) | What the panels make |
+| `grid` | power | Positive while the house draws from the grid, negative while it exports |
+| `load` | power | What the house uses. Either sign: Fronius counts it as negative |
+| `battery` | power | Positive while the battery discharges, negative while it charges |
+| `charge` | battery level (%) | How full the battery is |
+
+`grid` and `battery` can have `"invert": true` for a sensor that counts the other way round. Leave out a role
+you have no sensor for: without `grid`, it is worked out from the others where it can be. Until at least one
+sensor is linked, the power flow is simulated — a sunny day passes in six minutes — the way an unlinked lamp is.
+**Solar & battery** in the editor places the panels and the battery and links the sensors.
+
 ## `scenes`
 
 | Field | Meaning |
@@ -263,7 +308,8 @@ in when you pick a device under **Real device**; by hand it looks like this:
 Devices without a link stay simulated, so a plan can mix real and imaginary ones, and one home can mix
 platforms: Hue lamps, a Home Assistant air conditioner and a Smart Life plug side by side.
 
-Device IDs identify your hardware. Remove the `link`, `sensor` and `tuya` objects before you share a plan.
+Device IDs identify your hardware. Remove the `link`, `sensor` and `tuya` objects (and `energy.sensors`) before
+you share a plan.
 
 ## Errors
 
