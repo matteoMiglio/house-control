@@ -54,7 +54,7 @@ struct HomeAssistantScreen: View {
                 .disabled(!model.canConnectHomeAssistant)
                 if let error = model.haError { Footnote(error, bad: true) }
             }
-            Footnote("The token stays on this Mac (and goes to the iPhones you paired, over their encrypted link). Lights, switches, climate devices and temperature sensors appear here.")
+            Footnote("The token stays on this Mac (and goes to the iPhones you paired, over their encrypted link). Lights, switches, climate devices, and temperature, power and battery sensors appear here.")
         }
     }
 }

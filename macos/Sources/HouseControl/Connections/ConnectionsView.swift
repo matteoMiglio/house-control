@@ -309,7 +309,8 @@ struct ServiceDevices: View {
     let model: ConnectionsModel
     let service: ConnectionsModel.Service
 
-    private static let kinds = [("light", "Lights and plugs"), ("ac", "Air conditioners"), ("sensor", "Temperature sensors")]
+    private static let kinds = [("light", "Lights and plugs"), ("ac", "Air conditioners"), ("sensor", "Temperature sensors"),
+                                ("power", "Power sensors"), ("battery", "Battery levels")]
 
     var body: some View {
         if model.loading {
@@ -319,7 +320,7 @@ struct ServiceDevices: View {
         } else if model.devices != nil {
             let list = model.devices(of: service)
             if list.isEmpty {
-                Footnote("Connected, but no lamps, air conditioners or temperature sensors were found.")
+                Footnote("Connected, but no lamps, air conditioners or sensors were found.")
             } else {
                 ForEach(Self.kinds, id: \.0) { kind, title in
                     let items = list.filter { $0.kind == kind }

@@ -490,6 +490,9 @@ final class ConnectionsModel {
             }
             if let id = tuya?["sensorId"] as? String, !id.isEmpty { out["smartlife|\(id)"] = "\(name) · room" }
         }
+        for (role, sensor) in HomeConfig(plan: plan ?? [:]).energy?.sensors ?? [:] {
+            out["\(sensor.service)|\(sensor.id)"] = role.title
+        }
         return out
     }
 }
