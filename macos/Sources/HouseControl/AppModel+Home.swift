@@ -62,18 +62,6 @@ extension AppModel {
         setPolling(false)
     }
 
-    /// The AI Access screen came on screen: it shows the AI Access page, made the first time.
-    func agentSlot(_ slot: WebSlotView, present: Bool) {
-        guard present else { return }
-        if agentPage == nil {
-            let host = WebHost(mode: "agent", transparent: false) { [unowned self] in ["agent": self.agent.status()] }
-            agent.attach(host)
-            agentPage = host
-            host.load()
-        }
-        if let host = agentPage { slot.lend(host.webView) }
-    }
-
     /// Edit Home came on screen: it shows the editor's page, made the first time.
     func editorSlot(_ slot: WebSlotView, present: Bool) {
         guard present else { return }

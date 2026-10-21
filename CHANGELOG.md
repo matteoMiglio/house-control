@@ -64,6 +64,8 @@ What changed in each release of House Control. The Mac app is on
 - **Connections is native on the Mac too:** Smart Life, Home Assistant, Philips Hue and Apple Home each have their own
   screen in the window, with the devices they found and which lamp or AC of your plan uses each one. Linking a lamp or
   an AC to a device stays in Edit Home, which no longer has a Connections row of its own.
+- **AI Access is native too:** the same screen (the orb, the private link, connecting an assistant, what it may do,
+  the live activity feed) drawn in SwiftUI instead of a web page.
 - On the Mac the state of every lamp and AC is now kept by the app itself, not by the panel's web page: the panel,
   the island, the widgets and AI Access all change one shared state, and what you set is kept in the app's data
   folder (taken over once from where the panel kept it before).

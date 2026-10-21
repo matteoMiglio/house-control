@@ -274,8 +274,6 @@ const mode = window.__HOUSE_BOOT__?.mode || new URLSearchParams(location.search)
 if (mode === 'editor') {
   document.documentElement.classList.add('mode-editor');
   import('./editor/editor.js').then((m) => m.bootEditor(app)).catch((e) => fatal('Editor failed to start', e));
-} else if (mode === 'agent') {
-  import('./agent/console.js').then((m) => m.bootConsole(app)).catch((e) => fatal('AI Access failed to start', e));
 } else if (mode === 'island') {
   document.documentElement.classList.add('mode-island');
   import('./island/island.js').then((m) => m.bootIsland(app)).catch((e) => console.error(e));

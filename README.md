@@ -394,7 +394,7 @@ npm run dev
 ```
 
 Then open `http://localhost:5199/`. Add `?plan=studio` for the second demo plan, `?mode=editor` for the editor,
-`?mode=island` for the island, `?mode=agent` for the AI Access window (with a simulated link), `?platform=ios` for the iPhone layout, or `?device=living.ac` to start on a
+`?mode=island` for the island, `?platform=ios` for the iPhone layout, or `?device=living.ac` to start on a
 device's sheet (`?device=energy` for the solar one). Set `PORT` to use another port.
 
 Environment variables understood by the app:

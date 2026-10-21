@@ -53,7 +53,7 @@ struct MainView: View {
             case .home: HomeView(model: model)
             case .editor: EditorView(model: model)
             case .connections: ConnectionsView(model: model.connections)
-            case .agent: AgentView(model: model)
+            case .agent: AgentView(agent: model.agent)
             case .pairing: PairingView(model: model)
             case .settings: MacSettingsView(model: model)
             }
@@ -84,19 +84,6 @@ private struct HomeView: View {
         // with the sidebar's first row.
         HomeSurface(model: model.home, chrome: .window) { slot, present in model.homeSlot(slot, present: present) }
             .ignoresSafeArea(.container, edges: .top)
-    }
-}
-
-/// AI Access: its page, made for a narrow window, in a column down the middle.
-private struct AgentView: View {
-    let model: AppModel
-
-    var body: some View {
-        WebSlot { slot, present in model.agentSlot(slot, present: present) }
-            .frame(maxWidth: 640)
-            .frame(maxWidth: .infinity)
-            .background(Color(red: 7 / 255, green: 9 / 255, blue: 15 / 255))
-            .navigationTitle("AI Access")
     }
 }
 

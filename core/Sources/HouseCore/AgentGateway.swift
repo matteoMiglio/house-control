@@ -24,7 +24,9 @@ public struct AgentPermissions: Equatable {
 }
 
 /// One line of the activity feed the user watches while an AI has access.
-public struct AgentActivity {
+public struct AgentActivity: Identifiable {
+    /// Tells two entries apart even with the same time and title (a feed animates the new ones).
+    public let id = UUID()
     public var date: Date
     /// "ChatGPT", "Claude", "Cursor"… or "AI agent" when it does not say.
     public var client: String

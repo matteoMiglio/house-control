@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import WebKit
 import HouseCore
 
@@ -9,50 +10,55 @@ import HouseCore
 ///
 /// Off until the user starts it. Every start makes a new secret link; Stop (or the auto-stop
 /// timer) closes the gateway and the tunnel, and the old address stops existing.
+///
+/// The AI Access screen (Agent/AgentView.swift) reads what it shows from here.
 @MainActor
+@Observable
 final class AgentController: NSObject, AgentBackend {
     enum Reach: String { case internet, local }
     enum Phase: Equatable { case off, starting, live, failed(String) }
 
-    let gateway = AgentGateway()
-    private lazy var server = LoopbackHTTPServer { [unowned self] request in await self.gateway.handle(request) }
-    private let tunnel: CloudflareTunnel
-    private let plans: PlanStore
+    @ObservationIgnored let gateway = AgentGateway()
+    @ObservationIgnored private lazy var server = LoopbackHTTPServer { [unowned self] request in await self.gateway.handle(request) }
+    @ObservationIgnored private let tunnel: CloudflareTunnel
+    @ObservationIgnored private let plans: PlanStore
     /// The panel runs every request: it holds the state of each device.
-    private let panel: () -> WebHost
+    @ObservationIgnored private let panel: () -> WebHost
     /// Reloads every view after the plan changed (and tells paired iPhones).
-    private let reloadAll: () -> Void
-    var onLiveChange: ((Bool) -> Void)?
-    var onHostChange: ((WebHost?) -> Void)?
-    private weak var host: WebHost?
+    @ObservationIgnored private let reloadAll: () -> Void
+    @ObservationIgnored var onLiveChange: ((Bool) -> Void)?
 
     private(set) var phase: Phase = .off
-    private var activity: [AgentActivity] = []
+    /// What assistants read and did, oldest first (the last 200).
+    private(set) var activity: [AgentActivity] = []
     /// What the plan was before each change an AI made, newest last.
-    private var history: [(data: Data?, active: String)] = []
-    private var startedAt: Date?
-    private var stopsAt: Date?
-    private var stopTimer: Timer?
-    private var tunnelError = ""
+    @ObservationIgnored private var history: [(data: Data?, active: String)] = []
+    /// An AI's change to the plan can be undone.
+    private(set) var canUndo = false
+    private(set) var startedAt: Date?
+    private(set) var stopsAt: Date?
+    @ObservationIgnored private var stopTimer: Timer?
+    /// While live: the private link, and the same for MCP clients.
+    private(set) var link: String?
+    private(set) var mcp: String?
+    /// Cloudflare's tunnel program: being downloaded, or what went wrong getting it.
+    private(set) var tunnelDownloading = false
+    private(set) var tunnelError = ""
 
-    private let defaults = UserDefaults.standard
-    private var reach: Reach {
-        // HOUSE_AGENT_REACH=local|internet overrides the saved choice for one run (tests).
-        get { Reach(rawValue: ProcessInfo.processInfo.environment["HOUSE_AGENT_REACH"] ?? defaults.string(forKey: "agent.reach") ?? "") ?? .internet }
-        set { defaults.set(newValue.rawValue, forKey: "agent.reach") }
+    @ObservationIgnored private let defaults = UserDefaults.standard
+    /// Over the internet (through Cloudflare) or for apps on this Mac only.
+    private(set) var reach: Reach {
+        didSet { defaults.set(reach.rawValue, forKey: "agent.reach") }
     }
     /// "1h", "8h" or "never".
-    private var autoStop: String {
-        get { defaults.string(forKey: "agent.autoStop") ?? "8h" }
-        set { defaults.set(newValue, forKey: "agent.autoStop") }
+    private(set) var autoStop: String {
+        didSet { defaults.set(autoStop, forKey: "agent.autoStop") }
     }
-    private var permissions: AgentPermissions {
-        get { AgentPermissions(control: defaults.object(forKey: "agent.control") as? Bool ?? true,
-                               edit: defaults.object(forKey: "agent.edit") as? Bool ?? true) }
-        set {
-            defaults.set(newValue.control, forKey: "agent.control")
-            defaults.set(newValue.edit, forKey: "agent.edit")
-            gateway.permissions = newValue
+    private(set) var permissions: AgentPermissions {
+        didSet {
+            defaults.set(permissions.control, forKey: "agent.control")
+            defaults.set(permissions.edit, forKey: "agent.edit")
+            gateway.permissions = permissions
         }
     }
 
@@ -61,18 +67,26 @@ final class AgentController: NSObject, AgentBackend {
         self.panel = panel
         self.reloadAll = reloadAll
         tunnel = CloudflareTunnel(directory: plans.directory)
+        // HOUSE_AGENT_REACH=local|internet overrides the saved choice for one run (tests).
+        reach = Reach(rawValue: ProcessInfo.processInfo.environment["HOUSE_AGENT_REACH"] ?? defaults.string(forKey: "agent.reach") ?? "") ?? .internet
+        autoStop = defaults.string(forKey: "agent.autoStop") ?? "8h"
+        permissions = AgentPermissions(control: defaults.object(forKey: "agent.control") as? Bool ?? true,
+                                       edit: defaults.object(forKey: "agent.edit") as? Bool ?? true)
         super.init()
         gateway.backend = self
         gateway.permissions = permissions
         gateway.onActivity = { [weak self] entry in self?.log(entry) }
         tunnel.onChange = { [weak self] state in self?.tunnelChanged(state) }
+        push()
     }
 
     var isLive: Bool { phase == .live }
 
     // MARK: - Start and stop
 
-    func start() {
+    /// Starts the link, over `reach` when given (the screen's switch, or "Use this Mac only").
+    func start(reach new: Reach? = nil) {
+        if let new, phase != .live, phase != .starting { reach = new }
         switch phase {
         case .starting, .live: return
         default: break
@@ -150,6 +164,8 @@ final class AgentController: NSObject, AgentBackend {
         stopsAt = nil
         startedAt = nil
         phase = .off
+        link = nil
+        mcp = nil
         gateway.rotateToken() // the old link is dead even if the same address came back
         if wasLive {
             log(AgentActivity(date: Date(), client: "House Control", title: "\(reason) — the link no longer works", ok: true, quiet: false))
@@ -243,106 +259,63 @@ final class AgentController: NSObject, AgentBackend {
         log(AgentActivity(date: Date(), client: "House Control", title: "Undid the last floor plan change", ok: true, quiet: false))
     }
 
+    // MARK: - The screen
+
+    /// A new link: the current one stops working.
+    func newLink() {
+        stop()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.start() }
+    }
+
+    func setReach(_ new: Reach) {
+        guard phase != .live, phase != .starting else { return }
+        reach = new
+    }
+
+    func setControl(_ on: Bool) { permissions.control = on }
+    func setEdit(_ on: Bool) { permissions.edit = on }
+
+    /// "1h", "8h" or "never"; a live link's timer starts over from when it went live.
+    func setAutoStop(_ value: String) {
+        guard ["1h", "8h", "never"].contains(value) else { return }
+        autoStop = value
+        if phase == .live { scheduleAutoStop() }
+    }
+
+    /// Undo home edit: what went wrong lands in the feed.
+    func undoFromScreen() {
+        do { try undo() } catch {
+            log(AgentActivity(date: Date(), client: "House Control", title: error.localizedDescription, ok: false, quiet: false))
+        }
+    }
+
+    /// Downloads Cloudflare's tunnel program, once.
+    func installTunnel() {
+        guard !tunnelDownloading, !tunnel.isDownloading else { return }
+        tunnelError = ""
+        tunnelDownloading = true
+        Task { @MainActor in
+            do {
+                try await tunnel.download()
+                if case .failed("needs-cloudflared") = phase { phase = .off }
+            } catch {
+                tunnelError = error.localizedDescription
+            }
+            tunnelDownloading = false
+            push()
+        }
+    }
+
     struct AgentError: LocalizedError {
         let message: String
         init(_ message: String) { self.message = message }
         var errorDescription: String? { message }
     }
 
-    // MARK: - Page
-
-    func attach(_ host: WebHost) {
-        detach()
-        self.host = host
-        host.onMessage = { [weak self] message in self?.handle(message) }
-        onHostChange?(host)
-        push()
-    }
-
-    func detach() {
-        host?.onMessage = nil
-        host = nil
-        onHostChange?(nil)
-    }
-
-    private func handle(_ message: [String: Any]) {
-        switch message["type"] as? String {
-        case "agent.start":
-            if let r = (message["reach"] as? String).flatMap(Reach.init) { reach = r }
-            start()
-        case "agent.stop":
-            stop()
-        case "agent.settings":
-            var p = permissions
-            if let v = message["control"] as? Bool { p.control = v }
-            if let v = message["edit"] as? Bool { p.edit = v }
-            permissions = p
-            if let v = message["autoStop"] as? String, ["1h", "8h", "never"].contains(v) {
-                autoStop = v
-                if phase == .live { scheduleAutoStop() }
-            }
-            if let r = (message["reach"] as? String).flatMap(Reach.init), phase != .live, phase != .starting { reach = r }
-            push()
-        case "agent.copy":
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(message["text"] as? String ?? "", forType: .string)
-        case "agent.open":
-            if let text = message["url"] as? String, let url = URL(string: text), ["http", "https"].contains(url.scheme ?? "") {
-                NSWorkspace.shared.open(url)
-            }
-        case "agent.undo":
-            do { try undo() } catch { log(AgentActivity(date: Date(), client: "House Control", title: error.localizedDescription, ok: false, quiet: false)) }
-            push()
-        case "agent.install":
-            guard !tunnel.isDownloading else { return }
-            Task { @MainActor in
-                push()
-                do {
-                    try await tunnel.download()
-                    if case .failed("needs-cloudflared") = phase { phase = .off }
-                    push()
-                } catch {
-                    tunnelError = error.localizedDescription
-                    push()
-                }
-            }
-            DispatchQueue.main.async { [weak self] in self?.push() }
-        case "ready":
-            push()
-        default:
-            break
-        }
-    }
-
-    func status() -> [String: Any] {
-        var out: [String: Any] = [
-            "reach": reach.rawValue,
-            "autoStop": autoStop,
-            "control": permissions.control,
-            "edit": permissions.edit,
-            "canUndo": !history.isEmpty,
-            "activity": activity.suffix(80).map(\.json),
-            "home": plans.activePlan == "custom" ? (plans.customPlanName ?? "My home") : "Demo home",
-            "tunnel": ["installed": tunnel.binary != nil, "downloading": tunnel.isDownloading, "error": tunnelError],
-        ]
-        switch phase {
-        case .off: out["state"] = "off"
-        case .starting: out["state"] = "starting"
-        case .live: out["state"] = "live"
-        case .failed(let message):
-            out["state"] = message == "needs-cloudflared" ? "setup" : "error"
-            out["error"] = message
-        }
-        if phase == .live {
-            out["link"] = gateway.linkURL
-            out["mcp"] = gateway.mcpURL
-            out["startedAt"] = (startedAt?.timeIntervalSince1970 ?? 0) * 1000
-            if let stopsAt { out["stopsAt"] = stopsAt.timeIntervalSince1970 * 1000 }
-        }
-        return out
-    }
-
+    /// Brings what the screen shows from the tunnel and the gateway up to date.
     private func push() {
-        host?.call("agentStatus", status())
+        canUndo = !history.isEmpty
+        link = phase == .live ? gateway.linkURL : nil
+        mcp = phase == .live ? gateway.mcpURL : nil
     }
 }

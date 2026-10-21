@@ -64,7 +64,6 @@ final class AppModel: NSObject {
             self.hosts[.primary]?.call("agentLive", live)
             self.refreshStatusIcon()
         }
-        agent.onHostChange = { [weak self] host in self?.hosts[.agent] = host }
         storedAgent = agent
         return agent
     }
@@ -92,14 +91,12 @@ final class AppModel: NSObject {
     @ObservationIgnored var mainOpen = false
     /// Counts requests to open the panel, so one still waiting for a snapshot can tell it was cancelled.
     @ObservationIgnored var panelRequest = 0
-    /// The AI Access page, made the first time its screen is shown and kept from then on.
-    @ObservationIgnored var agentPage: WebHost?
     /// Pair iPhone: the code to scan and how pairing is going.
     var pairingLink: String?
     var pairingStatus = PairingStatus(text: "", active: false)
     struct PairingStatus: Equatable { var text: String; var active: Bool }
 
-    enum HostRole: CaseIterable { case primary, editor, agent, island }
+    enum HostRole: CaseIterable { case primary, editor, island }
     @ObservationIgnored var hosts: [HostRole: WebHost] = [:]
     /// The Smart Life User Code a paired iPhone signed in with, to save typing it here.
     @ObservationIgnored var phoneUserCode = ""
