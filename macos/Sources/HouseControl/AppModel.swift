@@ -192,7 +192,8 @@ final class AppModel: NSObject {
         reloadLinks()
         host.load()
         startSync()
-        if islandEnabled { showIsland() }
+        // macOS remembers a hidden menu bar icon: without the island it is shown again.
+        if islandEnabled { showIsland() } else { updateStatusItem() }
         LoginItem.followMove()
         loginState = LoginItem.state
 
