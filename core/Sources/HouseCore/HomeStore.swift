@@ -114,7 +114,9 @@ public final class HomeStore {
         for id in acOrder {
             acs[id] = ["on": .bool(false), "target": .number(24), "mode": .string("cool"), "fan": .string("auto"),
                        "swing": .string("swing"), "sleep": .bool(false), "eco": .bool(false),
-                       "roomTemp": .number(Swift.min(outdoorTemp - 2, 27))]
+                       "roomTemp": .number(Swift.min(outdoorTemp - 2, 27)),
+                       // On but not running right now (a real thermostat says so); never sent to a device.
+                       "idle": .bool(false)]
         }
         if let file, let data = try? Data(contentsOf: file),
            let saved = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -399,6 +401,8 @@ public final class HomeStore {
         guard var current = acs[id], let config = acConfigs[id] else { return false }
         var clean = patch
         if let t = clean["target"]?.number { clean["target"] = .number(Swift.min(config.max, Swift.max(config.min, t.rounded()))) }
+        // Switched on here: running until the thermostat says otherwise at the next poll.
+        if !remote, clean["on"]?.truthy == true, current["on"]?.truthy != true { clean["idle"] = .bool(false) }
         let diff = clean.filter { current[$0.key] != $0.value }
         guard !diff.isEmpty else { return false }
         let before = diff.keys.reduce(into: [String: JSONValue]()) { $0[$1] = current[$1] ?? .null }
@@ -406,6 +410,7 @@ public final class HomeStore {
         acs[id] = current
         var sendable = diff
         sendable["roomTemp"] = nil
+        sendable["idle"] = nil
         if !remote, !sendable.isEmpty { dispatch(.ac, id, sendable, before) }
         return true
     }

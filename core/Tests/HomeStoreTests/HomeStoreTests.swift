@@ -88,6 +88,17 @@ struct HomeStoreTests {
         #expect(changes == 1)
     }
 
+    @Test func anIdleACIsNeverSentAndRunsOnceSwitchedOnHere() {
+        let devices = Devices()
+        let store = HomeStore(plan: Self.plan, file: nil, transmit: devices.transmit)
+        store.applyRemote(["acs": ["ac": ["on": true, "idle": true]]])
+        #expect(store.acs["ac"]?["idle"] == .bool(true))
+        store.setAC("ac", ["on": false])
+        store.setAC("ac", ["on": true])
+        #expect(store.acs["ac"]?["idle"] == .bool(false))
+        #expect(devices.sent.allSatisfy { ($0["patch"] as? [String: Any])?["idle"] == nil })
+    }
+
     @Test func aSceneSetsWhiteOverColourAndIsRemembered() {
         let store = HomeStore(plan: Self.plan, file: nil, transmit: nil)
         store.setLight("lamp", ["color": "#00ff00"])

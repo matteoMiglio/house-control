@@ -366,16 +366,20 @@ struct ACTile: View {
         let s = model.ac(cfg.id)
         let rgb = PanelColors.mode(s.mode)
         let c = rgb.color
+        // On but not running: outlined in the mode's colour instead of lit with it.
+        let lit = s.on && !s.idle
         let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        let bubble = RoundedRectangle(cornerRadius: 13, style: .continuous)
         HStack(spacing: 11) {
             Icon(s.mode, size: 19)
-                .foregroundStyle(s.on ? Color(red: 6 / 255, green: 22 / 255, blue: 44 / 255) : P.muted)
+                .foregroundStyle(lit ? Color(red: 6 / 255, green: 22 / 255, blue: 44 / 255) : s.on ? c : P.muted)
                 .frame(width: 38, height: 38)
-                .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(s.on ? c : Color.white.opacity(0.07)))
-                .shadow(color: s.on ? c : .clear, radius: 11)
+                .background(bubble.fill(lit ? c : s.on ? .clear : Color.white.opacity(0.07)))
+                .overlay(bubble.strokeBorder(s.idle && s.on ? c.opacity(0.7) : .clear, lineWidth: 1.5))
+                .shadow(color: lit ? c : .clear, radius: 11)
             VStack(alignment: .leading, spacing: 2) {
                 Text(cfg.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(P.text).lineLimit(1)
-                Text("\(s.on ? PanelColors.modeLabel[s.mode] ?? s.mode : "Off") · Room \(String(format: "%.1f", s.roomTemp))°")
+                Text("\(PanelColors.acState(s)) · Room \(String(format: "%.1f", s.roomTemp))°")
                     .font(.system(size: 11.5).monospacedDigit())
                     .foregroundStyle(s.on ? rgb.withWhite(0.45) : P.muted)
                     .lineLimit(1)
@@ -392,10 +396,11 @@ struct ACTile: View {
             }
             Button { model.setAC(cfg.id, ["on": !s.on]) } label: {
                 Icon("power", size: 16, stroke: 2.2)
-                    .foregroundStyle(s.on ? Color(red: 6 / 255, green: 22 / 255, blue: 44 / 255) : P.muted)
+                    .foregroundStyle(lit ? Color(red: 6 / 255, green: 22 / 255, blue: 44 / 255) : s.on ? c : P.muted)
                     .frame(width: 34, height: 34)
-                    .background(Circle().fill(s.on ? c : Color.white.opacity(0.08)))
-                    .shadow(color: s.on ? c : .clear, radius: 9)
+                    .background(Circle().fill(lit ? c : s.on ? .clear : Color.white.opacity(0.08)))
+                    .overlay(Circle().strokeBorder(s.idle && s.on ? c.opacity(0.7) : .clear, lineWidth: 1.5))
+                    .shadow(color: lit ? c : .clear, radius: 9)
                     .contentShape(Circle())
             }
             .buttonStyle(PressScale(scale: 0.88))
@@ -404,18 +409,19 @@ struct ACTile: View {
         .padding(.horizontal, 12)
         .frame(height: 68)
         .background {
-            if s.on {
+            if lit {
                 shape.fill(LinearGradient(colors: [c.opacity(0.26), c.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing))
             } else {
                 shape.fill(hover.on ? P.glassHi : P.glass)
             }
         }
-        .overlay(shape.strokeBorder(s.on ? c.opacity(0.42) : P.line))
-        .shadow(color: s.on ? c.opacity(0.5) : .clear, radius: 10, y: 12)
+        .overlay(shape.strokeBorder(lit ? c.opacity(0.42) : P.line))
+        .shadow(color: lit ? c.opacity(0.5) : .clear, radius: 10, y: 12)
         .contentShape(shape)
         .onTapGesture { model.openSheet(.ac(cfg.id)) }
         .onHover { hover.on = $0 }
         .animation(.easeOut(duration: 0.26), value: s.on)
+        .animation(.easeOut(duration: 0.26), value: s.idle)
         .animation(.easeOut(duration: 0.26), value: s.mode)
         .animation(P.ease(0.3), value: s.target)
     }

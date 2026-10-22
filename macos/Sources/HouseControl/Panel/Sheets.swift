@@ -198,7 +198,7 @@ private struct ACSheet: View {
             SheetHead(model: model, name: cfg.name, power: (s.on, { set(["on": !s.on]) })) {
                 Icon("thermo", size: 14)
                 Text("Room ") + Text(verbatim: String(format: "%.1f°C", s.roomTemp)).foregroundColor(P.text).fontWeight(.semibold)
-                LiveDot(on: s.on, color: modeColor)
+                LiveDot(on: s.on && !s.idle, color: modeColor)
             }
             HStack(alignment: .bottom, spacing: 12) {
                 BigNumber(value: Int(s.target), unit: "°C", off: !s.on)

@@ -55,6 +55,10 @@ struct RGB: Equatable {
 enum PanelColors {
     static let modes: [String: String] = ["cool": "#5db2ff", "heat": "#ff8c3a", "dry": "#62e0cf", "fan": "#cfdcff", "auto": "#9bd28a"]
     static let modeLabel = ["cool": "Cool", "heat": "Heat", "dry": "Dry", "fan": "Fan", "auto": "Auto"]
+    /// "Off", "Idle" or the mode, as the panel and the island name an AC's state.
+    static func acState(_ s: ACState) -> String {
+        !s.on ? "Off" : s.idle ? "Idle" : modeLabel[s.mode] ?? s.mode
+    }
     static let fanLabel = ["auto": "Auto", "low": "Low", "medium": "Medium", "high": "High", "turbo": "Turbo"]
     static let swingLabel = ["swing": "Swing", "l1": "L1", "l2": "L2", "l3": "L3", "l4": "L4", "l5": "L5", "off": "Off"]
     static let swings = ["swing", "l1", "l2", "l3", "l4", "l5", "off"]

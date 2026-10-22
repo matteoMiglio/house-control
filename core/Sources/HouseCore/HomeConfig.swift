@@ -130,6 +130,8 @@ public struct ACState: Equatable, Sendable {
     public var sleep = false
     public var eco = false
     public var roomTemp = 26.0
+    /// On, but not running right now: the room is already warm (or cool) enough.
+    public var idle = false
 
     public init() {}
 
@@ -142,6 +144,7 @@ public struct ACState: Equatable, Sendable {
         sleep = s["sleep"]?.bool ?? false
         eco = s["eco"]?.bool ?? false
         roomTemp = s["roomTemp"]?.number ?? 26
+        idle = s["idle"]?.bool ?? false
     }
 }
 

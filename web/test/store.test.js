@@ -23,7 +23,7 @@ const config = {
 const features = { modes: ['cool', 'dry'], fans: ['low', 'high'], sleep: false, eco: true, swing: false };
 const update = {
   lights: { lamp: { on: true, brightness: 0.4, temp: 3500 } },
-  acs: { ac: { on: true, target: 22, mode: 'dry', fan: 'high', swing: 'off', sleep: false, eco: true, roomTemp: 25.5 } },
+  acs: { ac: { on: true, target: 22, mode: 'dry', fan: 'high', swing: 'off', sleep: false, eco: true, roomTemp: 25.5, idle: false } },
   features: { ac: features },
 };
 

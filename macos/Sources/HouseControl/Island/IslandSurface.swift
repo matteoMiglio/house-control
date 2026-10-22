@@ -494,13 +494,18 @@ private struct Bubble: View {
     let on: Bool
     let color: RGB
     let ink: Color
+    /// On but not running (an idle AC): outlined in its colour instead of lit with it.
+    var outlined = false
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let lit = on && !outlined
         Icon(icon, size: 15)
-            .foregroundStyle(on ? ink : P.muted)
+            .foregroundStyle(lit ? ink : on ? color.color : P.muted)
             .frame(width: 28, height: 28)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(on ? color.color : Color.white.opacity(0.08)))
-            .shadow(color: on ? color.color : .clear, radius: 8)
+            .background(shape.fill(lit ? color.color : on ? .clear : Color.white.opacity(0.08)))
+            .overlay(shape.strokeBorder(on && outlined ? color.color.opacity(0.7) : .clear, lineWidth: 1.5))
+            .shadow(color: lit ? color.color : .clear, radius: 8)
     }
 }
 
@@ -512,20 +517,22 @@ private struct ACChip: View {
         let home = model.home
         let s = home.ac(cfg.id)
         let rgb = PanelColors.mode(s.mode)
-        ChipFace(on: s.on, color: rgb) {
+        let lit = s.on && !s.idle
+        ChipFace(on: lit, color: rgb) {
             HStack(spacing: 6) {
-                Bubble(icon: s.mode, on: s.on, color: rgb, ink: Color(red: 6 / 255, green: 22 / 255, blue: 44 / 255))
-                ChipText(name: cfg.name, sub: "\(s.on ? PanelColors.modeLabel[s.mode] ?? s.mode : "Off") · \(Int(s.roomTemp.rounded()))° inside", on: s.on, color: rgb)
+                Bubble(icon: s.mode, on: s.on, color: rgb, ink: Color(red: 6 / 255, green: 22 / 255, blue: 44 / 255), outlined: s.idle)
+                ChipText(name: cfg.name, sub: "\(PanelColors.acState(s)) · \(Int(s.roomTemp.rounded()))° inside", on: s.on, color: rgb)
                 ChipButton(icon: "minus", label: "Cooler") { home.setAC(cfg.id, ["on": true, "target": s.target - 1]) }
                 Text("\(Int(s.target))°").font(.system(size: 14, weight: .semibold).monospacedDigit())
                     .foregroundStyle(s.on ? P.text : P.faint).frame(minWidth: 30)
                 ChipButton(icon: "plus", label: "Warmer") { home.setAC(cfg.id, ["on": true, "target": s.target + 1]) }
                 Button { home.setAC(cfg.id, ["on": !s.on]) } label: {
                     Icon("power", size: 13, stroke: 2.4)
-                        .foregroundStyle(s.on ? Color(red: 6 / 255, green: 22 / 255, blue: 44 / 255) : P.muted)
+                        .foregroundStyle(lit ? Color(red: 6 / 255, green: 22 / 255, blue: 44 / 255) : s.on ? rgb.color : P.muted)
                         .frame(width: 24, height: 24)
-                        .background(Circle().fill(s.on ? rgb.color : Color.white.opacity(0.1)))
-                        .shadow(color: s.on ? rgb.color : .clear, radius: 7)
+                        .background(Circle().fill(lit ? rgb.color : s.on ? .clear : Color.white.opacity(0.1)))
+                        .overlay(Circle().strokeBorder(s.on && s.idle ? rgb.color.opacity(0.7) : .clear, lineWidth: 1.5))
+                        .shadow(color: lit ? rgb.color : .clear, radius: 7)
                         .contentShape(Circle())
                 }
                 .buttonStyle(PressScale(scale: 0.86))
