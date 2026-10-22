@@ -342,7 +342,7 @@ html.ios.mode-editor body { background: var(--bg); }
 }
 .p-float:active { color: var(--text); transform: scale(0.94); }
 .p-issue {
-  position: absolute; left: 12px; right: 60px; top: 12px; display: none; padding: 9px 12px; border-radius: 12px;
+  position: absolute; left: 12px; right: 60px; top: 60px; display: none; padding: 9px 12px; border-radius: 12px;
   font-size: 13px; line-height: 1.35; color: #ffd2cc; background: rgba(80, 22, 22, 0.88); border: 1px solid rgba(255, 120, 110, 0.5);
 }
 .p-issue.show { display: block; }
@@ -528,5 +528,21 @@ g.p-out.sel rect { stroke: #6aa6ff; stroke-width: 0.1; }
 .zoom button { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); }
 .zoom button:hover { color: var(--text); background: rgba(255, 255, 255, 0.08); }
 .editor.phone .zoom { display: none; }
+
+/* ---------- plan levels ---------- */
+
+.levels { position: absolute; left: 12px; top: 12px; display: flex; gap: 2px; padding: 3px; border-radius: 11px;
+  background: rgba(16, 21, 36, 0.82); border: 1px solid var(--line); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.levels button { height: 28px; padding: 0 11px; border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--muted); transition: background 160ms, color 160ms; }
+.levels button:hover { color: var(--text); }
+.levels button[aria-pressed='true'] { color: var(--text); background: rgba(255, 255, 255, 0.12); }
+.editor.phone .levels { border-radius: 13px; }
+.editor.phone .levels button { height: 32px; padding: 0 12px; font-size: 13px; border-radius: 10px; }
+.canvas.show-3d .levels { visibility: hidden; }
+/* what is on another level stays in sight, faded, and out of the pointer's way */
+.plan .off { opacity: 0.2; }
+.plan .off, .plan .off * { pointer-events: none; }
+.plan:not([data-level='all']):not([data-level='floor']) .p-room rect { cursor: pointer; }
+.row.off { opacity: 0.5; }
 .plan.panning, .plan.panning * { cursor: grab !important; }
 .plan.grabbing, .plan.grabbing * { cursor: grabbing !important; }

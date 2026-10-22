@@ -54,6 +54,10 @@ const LENSES = [
 ];
 const FLOOR_FILL = { oak: '#4a3d2e', walnut: '#3c2f28', tile: '#39424b', stone: '#30353c' };
 const WALLS = ['north', 'east', 'south', 'west'];
+// The plan's levels: everything at once, or what stands on the floor, hangs on the walls or from
+// the ceiling over a faded rest. Rooms are on every level, and only move on the floor.
+const PLAN_LEVELS = [['all', 'All'], ['floor', 'Floor'], ['walls', 'Walls'], ['ceiling', 'Ceiling']];
+const CEILING_LIGHTS = ['ceiling', 'pendant', 'spots'];
 const SCENE_ICONS = ['sun', 'sofa', 'film', 'moon', 'door', 'table', 'bed', 'tv', 'sparkles'];
 const REGIONS = [
   ['eu', 'Central Europe'], ['eu-w', 'Western Europe'], ['us', 'Western America'], ['us-e', 'Eastern America'],
@@ -83,6 +87,7 @@ export async function bootEditor(root) {
   let previewLights = true;
   let previewOutside = false;
   let previewPov = true; // a selected camera is previewed through its own lens
+  let level = 'all'; // the plan's level (PLAN_LEVELS)
   const undo = [];
   const redo = [];
   const tuya = {
@@ -128,6 +133,7 @@ export async function bootEditor(root) {
 
   const sidebar = h('aside.side');
   const plan = sv('svg', { class: 'plan', tabindex: 0 });
+  const levelBar = h('div.levels', { role: 'group', 'aria-label': 'Plan level' });
   const inspector = h('div.inspector');
   const previewHost = h('div.preview');
   const previewToggle = h('button.chip', { onclick: () => { previewLights = !previewLights; schedulePreview(0); } });
@@ -146,7 +152,7 @@ export async function bootEditor(root) {
         h('button.btn', { onclick: exportPlan }, 'Export…'),
         saveBtn)),
     sidebar,
-    h('main.canvas', plan, zoomBar, hint),
+    h('main.canvas', plan, levelBar, zoomBar, hint),
     h('aside.right', h('div.preview-wrap', previewHost, chips), inspector),
     h('footer.foot', status),
     toastEl));
@@ -175,6 +181,7 @@ export async function bootEditor(root) {
   function touch({ inspector: redrawInspector = true } = {}) {
     dirty = true;
     suggestion = null; // it was worked out for the plan as it was
+    followSelection();
     renderSidebar();
     renderPlan();
     if (redrawInspector) renderInspector();
@@ -190,6 +197,7 @@ export async function bootEditor(root) {
     // through its own lens.
     if (['camera', 'outdoor', 'site', 'coverage', 'energy', 'panel'].includes(next.kind) && before !== next.kind) previewOutside = true;
     if (next.kind === 'camera' && before !== 'camera') previewPov = true;
+    followSelection();
     renderSidebar();
     renderPlan();
     renderInspector();
@@ -317,7 +325,8 @@ export async function bootEditor(root) {
     const canvas = h('canvas');
     previewHost.replaceChildren(canvas);
     try {
-      world = createWorld(canvas, valid, previewStore(valid), {
+      // On the ceiling level the furniture is left out, so the lamps above it show.
+      world = createWorld(canvas, level === 'ceiling' ? { ...valid, furniture: [] } : valid, previewStore(valid), {
         outside: previewOutside,
         onHover() {},
         onPick(t) {
@@ -381,7 +390,7 @@ export async function bootEditor(root) {
       items.forEach((item, index) => {
         const [name, sub] = rowLabel(kind, item);
         const active = sel.kind === kind && sel.index === index;
-        nodes.push(h(`div.row${active ? '.active' : ''}`, { role: 'button', tabindex: 0, onclick: () => select({ kind, index }) },
+        nodes.push(h(`div.row${active ? '.active' : ''}${onLevel(kind, item) ? '' : '.off'}`, { role: 'button', tabindex: 0, onclick: () => select({ kind, index }) },
           h('span.row-name', name),
           isLinked(item) ? h('span.linked', { title: 'Linked to a real device' }, icon('link', 12, 2.2)) : null,
           h('span.row-sub', sub),
@@ -427,7 +436,10 @@ export async function bootEditor(root) {
       list.push({ id: uniqueId('room'), name: 'New room', rect: [fix(maxX), fix(doc.rooms.length ? minZ : 0), 3, 3], floor: 'oak' });
     } else if (kind === 'light') {
       if (!room) return toast('Add a room first', true);
-      list.push({ id: uniqueId(`${room.id}.light`), name: 'New light', room: room.id, type: 'ceiling', pos: freeSpot(room, center), capabilities: [] });
+      // What the level is about: a floor lamp, a strip along the north wall, or a ceiling light.
+      const type = { floor: 'floor', walls: 'strip' }[level] || 'ceiling';
+      const pos = type === 'strip' ? [center[0], fix(room.rect[1] + 0.13)] : freeSpot(room, center);
+      list.push({ id: uniqueId(`${room.id}.light`), name: 'New light', room: room.id, type, pos, ...(type === 'strip' ? { length: 1.2 } : {}), capabilities: [] });
     } else if (kind === 'ac') {
       if (!room) return toast('Add a room first', true);
       list.push({ id: uniqueId(`${room.id}.ac`), name: `${room.name} AC`, room: room.id, wall: 'north', pos: [center[0], room.rect[1]], y: 2.2 });
@@ -603,6 +615,44 @@ export async function bootEditor(root) {
 
   const isSel = (kind, index) => sel.kind === kind && sel.index === index;
 
+  // The level an item is on (null: every level, like a room, or none, like the panels on the roof).
+  function levelOf(kind, item) {
+    if (!item) return null;
+    if (kind === 'light') {
+      if (CEILING_LIGHTS.includes(item.type)) return 'ceiling';
+      // a strip high up is a cove light; lower down it lights a wall, a shelf, the back of a TV
+      if (item.type === 'strip') return (item.y ?? 1) >= (doc.wallHeight ?? 2.6) - 0.35 ? 'ceiling' : 'walls';
+      return WALL_LIGHTS.includes(item.type) ? 'walls' : 'floor';
+    }
+    return { furniture: 'floor', outdoor: 'floor', site: 'floor', battery: 'floor', opening: 'walls', ac: 'walls', camera: 'walls' }[kind] || null;
+  }
+  const onLevel = (kind, item) => level === 'all' || [null, level].includes(levelOf(kind, item));
+  const off = (kind, item) => (onLevel(kind, item) ? '' : ' off');
+  const roomsMove = () => level === 'all' || level === 'floor';
+  const selItem = () => (sel.kind === 'site' ? doc.site : sel.index != null ? listOf(sel.kind)?.[sel.index] : null);
+
+  function renderLevels() {
+    plan.dataset.level = level;
+    levelBar.replaceChildren(...PLAN_LEVELS.map(([id, label]) => h('button', { 'aria-pressed': String(id === level), onclick: () => setLevel(id) }, label)));
+  }
+  function setLevel(next) {
+    const was = level;
+    level = next;
+    renderLevels();
+    // Off its level, what was selected cannot be picked up any more: let go of it.
+    if (onLevel(sel.kind, selItem())) { renderSidebar(); renderPlan(); } else select({ kind: 'home' });
+    if ((was === 'ceiling') !== (next === 'ceiling')) schedulePreview(0);
+  }
+  // What is selected is always on the level shown: picking it (in the list, in 3D) or changing it
+  // (a strip raised to the ceiling) goes to its level.
+  function followSelection() {
+    const at = levelOf(sel.kind, selItem());
+    if (level === 'all' || !at || at === level) return;
+    if ((level === 'ceiling') !== (at === 'ceiling')) schedulePreview(0);
+    level = at;
+    renderLevels();
+  }
+
   // The Mac's plan view: null shows the whole plan; zooming and scrolling give it a box of its own.
   let planView = null;
   const wholePlan = () => {
@@ -658,8 +708,8 @@ export async function bootEditor(root) {
     const lot = doc.site?.boundary;
     if (lot?.length >= 3 && lot.every((p) => Array.isArray(p))) {
       const points = lot.map((p) => p.join(',')).join(' ');
-      kids.push(sv('polygon', { points, class: `p-site${sel.kind === 'site' ? ' sel' : ''}`, 'data-kind': 'site' }));
-      if (big) kids.push(sv('polygon', { points, class: 'p-hit p-site-hit', 'data-kind': 'site' }));
+      kids.push(sv('polygon', { points, class: `p-site${sel.kind === 'site' ? ' sel' : ''}${off('site', doc.site)}`, 'data-kind': 'site' }));
+      if (big) kids.push(sv('polygon', { points, class: `p-hit p-site-hit${off('site', doc.site)}`, 'data-kind': 'site' }));
     }
     // What the cameras make out: one camera's view while it is picked, all of them on the coverage screen.
     const covering = sel.kind === 'coverage' ? coverageNow() : sel.kind === 'camera' && doc.cameras[sel.index] ? coverageNow(doc.cameras[sel.index].id) : null;
@@ -673,12 +723,12 @@ export async function bootEditor(root) {
     // Paving lies under everything; the rest of what is outside stands among the rooms.
     const outdoorNodes = [];
     doc.outdoor.forEach((o, i) => {
-      const cls = `p-out ${o.type}${isSel('outdoor', i) ? ' sel' : ''}`;
+      const cls = `p-out ${o.type}${isSel('outdoor', i) ? ' sel' : ''}${off('outdoor', o)}`;
       const attrs = { class: cls, 'data-kind': 'outdoor', 'data-index': i };
       const shape = outdoorShape(o.type);
       if (shape === 'line' && Array.isArray(o.from) && Array.isArray(o.to)) {
         const line = { x1: o.from[0], y1: o.from[1], x2: o.to[0], y2: o.to[1] };
-        if (big) outdoorNodes.push(sv('line', { class: 'p-hit', 'data-kind': 'outdoor', 'data-index': i, ...line }));
+        if (big) outdoorNodes.push(sv('line', { class: `p-hit${off('outdoor', o)}`, 'data-kind': 'outdoor', 'data-index': i, ...line }));
         outdoorNodes.push(sv('line', { ...attrs, ...line }));
       } else if (shape === 'vehicle' && Array.isArray(o.pos)) {
         const [len, wid] = VEHICLE_SIZE[o.type];
@@ -714,7 +764,7 @@ export async function bootEditor(root) {
       const color = cameraColor(i);
       const { ends } = viewEdge({ ...cfg, fov: Math.min(Math.max(cfg.fov, 20), 180) });
       kids.push(sv('polygon', {
-        class: `p-cam-view${isSel('camera', i) ? ' sel' : ''}`, points: ends.map((p) => `${fix(p.x)},${fix(p.z)}`).join(' '),
+        class: `p-cam-view${isSel('camera', i) ? ' sel' : ''}${off('camera', c)}`, points: ends.map((p) => `${fix(p.x)},${fix(p.z)}`).join(' '),
         style: `--cam: ${color}`,
       }));
       return { c: cfg, i, color };
@@ -724,7 +774,7 @@ export async function bootEditor(root) {
       if (!Array.isArray(f.pos)) return;
       const [w, d] = footprint(f);
       kids.push(sv('g', {
-        class: `p-furn${isSel('furniture', i) ? ' sel' : ''}`, 'data-kind': 'furniture', 'data-index': i,
+        class: `p-furn${isSel('furniture', i) ? ' sel' : ''}${off('furniture', f)}`, 'data-kind': 'furniture', 'data-index': i,
         transform: `translate(${f.pos[0]} ${f.pos[1]}) rotate(${-(f.rot || 0)})`,
       },
         sv('rect', { x: -w / 2, y: -d / 2, width: w, height: d, rx: 0.06 }),
@@ -753,9 +803,9 @@ export async function bootEditor(root) {
     });
 
     doc.openings.forEach((o, i) => {
-      if (big) kids.push(sv('line', { class: 'p-hit', 'data-kind': 'opening', 'data-index': i, x1: o.from[0], y1: o.from[1], x2: o.to[0], y2: o.to[1] }));
+      if (big) kids.push(sv('line', { class: `p-hit${off('opening', o)}`, 'data-kind': 'opening', 'data-index': i, x1: o.from[0], y1: o.from[1], x2: o.to[0], y2: o.to[1] }));
       kids.push(sv('line', {
-        class: `p-open ${o.type || 'door'}${isSel('opening', i) ? ' sel' : ''}`, 'data-kind': 'opening', 'data-index': i,
+        class: `p-open ${o.type || 'door'}${isSel('opening', i) ? ' sel' : ''}${off('opening', o)}`, 'data-kind': 'opening', 'data-index': i,
         x1: o.from[0], y1: o.from[1], x2: o.to[0], y2: o.to[1],
       }));
     });
@@ -763,7 +813,7 @@ export async function bootEditor(root) {
     doc.acs.forEach((a, i) => {
       const rot = { north: 0, east: 90, south: 180, west: 270 }[a.wall] || 0;
       kids.push(sv('g', {
-        class: `p-ac${isSel('ac', i) ? ' sel' : ''}`, 'data-kind': 'ac', 'data-index': i,
+        class: `p-ac${isSel('ac', i) ? ' sel' : ''}${off('ac', a)}`, 'data-kind': 'ac', 'data-index': i,
         transform: `translate(${a.pos[0]} ${a.pos[1]}) rotate(${rot})`,
       }, big ? sv('rect', { x: -0.62, y: -0.12, width: 1.24, height: 0.74, class: 'hit' }) : null,
         sv('rect', { x: -0.47, y: 0.08, width: 0.94, height: 0.24, rx: 0.07 }),
@@ -773,7 +823,7 @@ export async function bootEditor(root) {
     const battery = doc.energy?.battery;
     if (Array.isArray(battery?.pos)) {
       kids.push(sv('g', {
-        class: `p-battery${isSel('battery', 0) ? ' sel' : ''}`, 'data-kind': 'battery', 'data-index': 0,
+        class: `p-battery${isSel('battery', 0) ? ' sel' : ''}${off('battery', battery)}`, 'data-kind': 'battery', 'data-index': 0,
         transform: `translate(${battery.pos[0]} ${battery.pos[1]}) rotate(${-(battery.rot || 0)})`,
       }, big ? sv('circle', { r: 0.5, class: 'hit' }) : null,
         sv('rect', { x: -0.31, y: -0.12, width: 0.62, height: 0.24, rx: 0.06 }),
@@ -782,7 +832,7 @@ export async function bootEditor(root) {
 
     doc.lights.forEach((l, i) => {
       const g = sv('g', {
-        class: `p-light ${l.type}${isSel('light', i) ? ' sel' : ''}${isLinked(l) ? ' linked' : ''}`, 'data-kind': 'light', 'data-index': i,
+        class: `p-light ${l.type}${isSel('light', i) ? ' sel' : ''}${isLinked(l) ? ' linked' : ''}${off('light', l)}`, 'data-kind': 'light', 'data-index': i,
         transform: `translate(${l.pos[0]} ${l.pos[1]}) rotate(${-(l.rot || 0)})`,
       });
       if (big) g.append(sv('circle', { r: 0.58, class: 'hit' }));
@@ -813,7 +863,7 @@ export async function bootEditor(root) {
       if (!cam) continue;
       const { c, i, color } = cam;
       const g = sv('g', {
-        class: `p-cam${isSel('camera', i) ? ' sel' : ''}`, 'data-kind': 'camera', 'data-index': i, style: `--cam: ${color}`,
+        class: `p-cam${isSel('camera', i) ? ' sel' : ''}${off('camera', c)}`, 'data-kind': 'camera', 'data-index': i, style: `--cam: ${color}`,
         transform: `translate(${c.pos[0]} ${c.pos[1]}) rotate(${-c.rot})`,
       });
       if (big) g.append(sv('circle', { r: 0.5, class: 'hit' }));
@@ -847,7 +897,7 @@ export async function bootEditor(root) {
     if (out && outdoorShape(out.type) === 'line') { handle(...out.from, 'end', sel.index, { 'data-end': 0 }); handle(...out.to, 'end', sel.index, { 'data-end': 1 }); }
     if (out && outdoorShape(out.type) === 'rect') handle(out.rect[0] + out.rect[2], out.rect[1] + out.rect[3], 'oresize', sel.index);
 
-    if (sel.kind === 'room' && doc.rooms[sel.index]) {
+    if (sel.kind === 'room' && doc.rooms[sel.index] && roomsMove()) {
       const [x, z, w, d] = doc.rooms[sel.index].rect;
       if (big) kids.push(sv('circle', { cx: x + w, cy: z + d, r: 0.55, class: 'hit', 'data-kind': 'resize', 'data-index': sel.index }));
       kids.push(sv('circle', { cx: x + w, cy: z + d, r: big ? 0.24 : 0.16, class: 'p-handle', 'data-kind': 'resize', 'data-index': sel.index }));
@@ -959,6 +1009,8 @@ export async function bootEditor(root) {
       return;
     }
     if (!isSel(kind, index)) select({ kind, index });
+    // Off the floor a room is picked, not moved: what hangs in it is easier to place.
+    if (kind === 'room' && !roomsMove()) return;
     const item = listOf(kind)[index];
     drag = { kind, index, start, moved: false };
     if (kind === 'room') {
@@ -1796,7 +1848,7 @@ export async function bootEditor(root) {
         h('button.btn.wide', { onclick: closeModals }, 'Keep editing')));
 
     sheet.append(grip, inspector);
-    canvas.append(plan, h('div.p-preview', previewHost, chips), issue, fitBtn, hint);
+    canvas.append(plan, levelBar, h('div.p-preview', previewHost, chips), issue, fitBtn, hint);
     const shell = h('div.editor.phone',
       h('header.p-bar', h('button.p-icon', { 'aria-label': 'Close', onclick: requestClose }, icon('close', 20, 2.2)),
         nameInput, undoBtn, redoBtn, doneBtn),
@@ -1914,8 +1966,8 @@ export async function bootEditor(root) {
       const room = sel.kind === 'room' && doc.rooms[sel.index];
       const [px, pz] = planPoint(ev);
       const inRoom = room && px >= room.rect[0] && px <= room.rect[0] + room.rect[2] && pz >= room.rect[1] && pz <= room.rect[1] + room.rect[3];
-      const grabbed = HANDLES.has(kind) || (kind === 'site' && sel.kind === 'site') || (kind && kind !== 'none' && isSel(kind, index));
-      if (grabbed || (inRoom && !['light', 'ac', 'camera'].includes(kind))) {
+      const grabbed = HANDLES.has(kind) || (kind === 'site' && sel.kind === 'site') || (kind && kind !== 'none' && isSel(kind, index) && (kind !== 'room' || roomsMove()));
+      if (grabbed || (inRoom && roomsMove() && !['light', 'ac', 'camera'].includes(kind))) {
         const what = grabbed ? [kind, index] : ['room', sel.index];
         // The view holds still while something is dragged past the plan's edge.
         if (!ui.view) ui.view = fitBox();
@@ -2024,6 +2076,7 @@ export async function bootEditor(root) {
     phone = ui;
   }
 
+  renderLevels();
   renderSidebar();
   renderPlan();
   renderInspector();
