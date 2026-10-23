@@ -158,6 +158,47 @@ struct HomeStoreTests {
         #expect(ticks == 1)
     }
 
+    @Test func withoutSimulationUnlinkedDevicesStayOffAndAreNotSwitched() {
+        var plan = Self.plan
+        plan["lights"] = (Self.plan["lights"] as! [[String: Any]]) + [["id": "real", "room": "living", "link": ["service": "ha", "id": "light.real"]]]
+        let devices = Devices()
+        let store = HomeStore(plan: plan, file: nil, transmit: devices.transmit)
+        store.setLight("lamp", ["on": true])
+        store.setAC("ac", ["on": true, "target": 20])
+        store.simulatesUnlinked = false
+        #expect(light(store, "lamp", "on") == .bool(false))
+        #expect(store.acs["ac"]?["on"] == .bool(false))
+        store.setLight("lamp", ["on": true])
+        store.applyScene("bright")
+        #expect(light(store, "lamp", "on") == .bool(false))
+        #expect(light(store, "real", "on") == .bool(true))
+        let room = store.acs["ac"]?["roomTemp"]?.number
+        store.simulate()
+        #expect(store.acs["ac"]?["roomTemp"]?.number == room)
+        store.simulatesUnlinked = true
+        store.setLight("lamp", ["on": true])
+        #expect(light(store, "lamp", "on") == .bool(true))
+    }
+
+    @Test func withoutSimulationStateFromBeforeDoesNotSwitchUnlinkedDevicesOn() {
+        let store = HomeStore(plan: Self.plan, file: nil, transmit: nil)
+        store.simulatesUnlinked = false
+        store.restoreIfNew(["home": "Test home", "lights": ["lamp": ["on": true]], "acs": ["ac": ["on": true]], "scene": "bright"])
+        #expect(light(store, "lamp", "on") == .bool(false))
+        #expect(store.acs["ac"]?["on"] == .bool(false))
+    }
+
+    @Test func withoutSimulationAPowerFlowWithoutSensorsIsNotMadeUp() {
+        let plan: [String: Any] = ["energy": ["panels": [["pos": [0, 0], "size": [4, 3]]], "battery": ["pos": [1, 1]]]]
+        let store = HomeStore(plan: plan, file: nil, transmit: nil)
+        #expect(!store.energyState.isEmpty)
+        store.simulatesUnlinked = false
+        #expect(store.energyState.isEmpty)
+        #expect(!store.simulateEnergy())
+        store.simulatesUnlinked = true
+        #expect(!store.energyState.isEmpty)
+    }
+
     @Test func theThermostatGivesTheHouseTemperature() {
         let store = HomeStore(plan: Self.plan, file: nil, transmit: nil)
         var ticks = 0

@@ -316,3 +316,14 @@ test('a lamp or an AC under the panels wins the pointer; the panels win over the
   assert.equal(pickOf([hit('light', 'lamp'), hit('energy', 'battery')]).id, 'lamp');
   assert.equal(pickOf([]), null);
 });
+
+test('without simulation, a power flow without sensors is not made up', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  const store = createStore(plan({ panels: [{ pos: [1, 1], size: [4, 3] }], battery: { pos: [2, 2] } }));
+  assert.ok(Number.isFinite(store.state.energy.solar));
+  store.setSimulatesUnlinked(false);
+  assert.ok(store.energyNotLinked);
+  assert.deepEqual(store.state.energy, {});
+  store.setSimulatesUnlinked(true);
+  assert.ok(!store.energyNotLinked && Number.isFinite(store.state.energy.solar));
+});

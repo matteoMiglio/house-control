@@ -38,6 +38,20 @@ public final class HomeStore {
     public let name: String
     /// Any lamp or AC linked to a real device.
     public let isLinked: Bool
+    /// False: the lamps and ACs linked to no real device stay off and cannot be switched, and a
+    /// power flow without sensors is not made up (the Mac's Settings). Nothing real changes.
+    public var simulatesUnlinked = true {
+        didSet {
+            guard simulatesUnlinked != oldValue else { return }
+            if simulatesUnlinked {
+                energyStepped = nil
+                _ = simulateEnergy()
+            } else {
+                switchOffUnlinked()
+            }
+            emit(nil, local: false)
+        }
+    }
     public var onChange: ((Change) -> Void)?
     /// A real device refused a change: its id and why.
     public var onDeviceError: ((_ id: String, _ message: String) -> Void)?
@@ -46,6 +60,8 @@ public final class HomeStore {
     private struct ACConfig { let id: String; let min: Double; let max: Double; let sensed: Bool }
     private struct Scene { let id: String; let lights: [String: [String: JSONValue]]; let acs: [String: [String: JSONValue]] }
 
+    /// The lamps and ACs linked to no real device.
+    private let unlinked: Set<String>
     private let lightConfigs: [LightConfig]
     private let acConfigs: [String: ACConfig]
     private let acOrder: [String]
@@ -96,12 +112,8 @@ public final class HomeStore {
             }
             return Scene(id: id, lights: patches(s["lights"]), acs: patches(s["acs"]))
         }
-        isLinked = (rawLights + rawACs).contains { device in
-            if let link = device["link"] as? [String: Any], let service = link["service"] as? String, !service.isEmpty,
-               let id = link["id"] as? String, !id.isEmpty { return true }
-            if let id = (device["tuya"] as? [String: Any])?["deviceId"] as? String, !id.isEmpty { return true }
-            return false
-        }
+        isLinked = (rawLights + rawACs).contains(where: HomeConfig.isLinked)
+        unlinked = Set((rawLights + rawACs).filter { !HomeConfig.isLinked($0) }.compactMap { $0["id"] as? String })
         self.file = file
         self.transmit = transmit
         energySimulation = EnergySimulation(plan: plan)
@@ -339,7 +351,7 @@ public final class HomeStore {
         var any = false
         let ambient = Swift.min(outdoorTemp - 2, 27)
         for id in acOrder {
-            guard let config = acConfigs[id], !config.sensed, var ac = acs[id],
+            guard let config = acConfigs[id], !config.sensed, live(id), var ac = acs[id],
                   let room = ac["roomTemp"]?.number else { continue }
             let on = ac["on"]?.bool == true
             let goal = on && ac["mode"]?.string != "fan" ? ac["target"]?.number ?? ambient : ambient
@@ -359,7 +371,7 @@ public final class HomeStore {
 
     /// The next step of a simulated power flow, for a plan with panels or a battery but no sensors.
     func simulateEnergy(at now: Date = Date()) -> Bool {
-        guard var sim = energySimulation else { return false }
+        guard simulatesUnlinked, var sim = energySimulation else { return false }
         let seconds = energyStepped.map { Swift.min(60, now.timeIntervalSince($0)) } ?? 0
         energyStepped = now
         let state = sim.step(at: now.timeIntervalSince1970, seconds: seconds)
@@ -374,10 +386,13 @@ public final class HomeStore {
 
     private func json(_ patch: [String: Any]) -> [String: JSONValue] { patch.compactMapValues(JSONValue.init(any:)) }
 
+    /// A real device, or a simulated one while simulating: it can be switched.
+    private func live(_ id: String) -> Bool { simulatesUnlinked || !unlinked.contains(id) }
+
     /// What `remote` writes leave alone: nothing is sent, nothing is rolled back.
     @discardableResult
     private func writeLight(_ id: String, _ patch: [String: JSONValue], remote: Bool = false) -> Bool {
-        guard var current = lights[id], let caps = lightConfigs.first(where: { $0.id == id })?.caps else { return false }
+        guard live(id), var current = lights[id], let caps = lightConfigs.first(where: { $0.id == id })?.caps else { return false }
         var clean: [String: JSONValue] = [:]
         if let on = patch["on"] { clean["on"] = .bool(on.truthy) }
         if caps.contains("brightness"), let b = patch["brightness"]?.number { clean["brightness"] = .number(Swift.min(1, Swift.max(0.05, b))) }
@@ -398,7 +413,7 @@ public final class HomeStore {
 
     @discardableResult
     private func writeAC(_ id: String, _ patch: [String: JSONValue], remote: Bool = false) -> Bool {
-        guard var current = acs[id], let config = acConfigs[id] else { return false }
+        guard live(id), var current = acs[id], let config = acConfigs[id] else { return false }
         var clean = patch
         if let t = clean["target"]?.number { clean["target"] = .number(Swift.min(config.max, Swift.max(config.min, t.rounded()))) }
         // Switched on here: running until the thermostat says otherwise at the next poll.
@@ -447,6 +462,16 @@ public final class HomeStore {
         }
         scene = saved["scene"] as? String
         restored = true
+        if !simulatesUnlinked { switchOffUnlinked() }
+    }
+
+    /// What was simulated, or saved while simulating, is not shown once simulation is off.
+    private func switchOffUnlinked() {
+        for id in unlinked {
+            if lights[id] != nil { lights[id]?["on"] = .bool(false) }
+            if acs[id] != nil { acs[id]?["on"] = .bool(false) }
+        }
+        if energySimulation != nil { energy = [:] }
     }
 
     /// `local`: the user (or a widget, or an AI) changed something. That settles the state:

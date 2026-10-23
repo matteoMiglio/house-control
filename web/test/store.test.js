@@ -89,3 +89,36 @@ test('older saved state without capabilities still restores and can be adopted',
   store.adopt({ ...legacy, acs: { ac: { target: 23 } } });
   assert.equal(store.state.acs.ac.target, 23);
 });
+
+test('without simulation, lamps and ACs linked to nothing real stay off and are not switched', () => {
+  const plan = {
+    ...config,
+    lights: [...config.lights, { id: 'real', capabilities: [], link: { service: 'ha', id: 'light.real' } }],
+    acs: [{ id: 'ac', min: 16, max: 30 }],
+  };
+  const store = createStore(plan);
+  store.setLight('lamp', { on: true });
+  store.setAC('ac', { on: true });
+  store.setSimulatesUnlinked(false);
+  assert.equal(store.state.lights.lamp.on, false);
+  assert.equal(store.state.acs.ac.on, false);
+  assert.ok(store.notLinked('lamp') && store.notLinked('ac') && !store.notLinked('real'));
+  store.setAllLights(true);
+  assert.equal(store.state.lights.lamp.on, false);
+  assert.equal(store.state.lights.real.on, true);
+  store.setSimulatesUnlinked(true);
+  store.setLight('lamp', { on: true });
+  assert.equal(store.state.lights.lamp.on, true);
+});
+
+test('with simulation off from the start, what was saved while simulating is not shown', () => {
+  saved.set(STORAGE_KEY, JSON.stringify({ home: config.name, lights: { lamp: { on: true } } }));
+  window.__HOUSE_BOOT__.simulateUnlinked = false;
+  try {
+    const store = createStore({ ...config, acs: [] });
+    assert.equal(store.state.lights.lamp.on, false);
+    assert.ok(store.notLinked('lamp'));
+  } finally {
+    delete window.__HOUSE_BOOT__.simulateUnlinked;
+  }
+});

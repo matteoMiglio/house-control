@@ -483,7 +483,7 @@ private struct EnergySheet: View {
             SheetHead(model: model, name: cfg.name) {
                 Text(cfg.hasSolar ? "Production" : "Charge")
                 Text("·")
-                Text(cfg.simulated ? "Simulated" : "Live").foregroundStyle(P.text).fontWeight(.semibold)
+                Text(!cfg.simulated ? "Live" : model.energyNotLinked ? "Not linked" : "Simulated").foregroundStyle(P.text).fontWeight(.semibold)
                 if !cfg.simulated { LiveDot(on: true) }
             }
             BigNumber(text: big?.number ?? "—", value: cfg.hasSolar ? s.solar ?? 0 : s.charge ?? 0, unit: big?.unit ?? "",
@@ -502,7 +502,9 @@ private struct EnergySheet: View {
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(P.line))
             .padding(.top, 18)
             Spacer(minLength: 16)
-            SheetNote(icon: cfg.hasSolar ? "sun" : "battery", text: cfg.simulated
+            SheetNote(icon: cfg.hasSolar ? "sun" : "battery", text: model.energyNotLinked
+                ? "No sensor is linked, and simulation is off in Settings. Link them in Edit Home → Solar & battery."
+                : cfg.simulated
                 ? "Simulated until a sensor is linked: a sunny day passes in six minutes. Link them in Edit Home → Solar & battery."
                 : "Read from the sensors linked in Edit Home → Solar & battery, as they report.")
         }

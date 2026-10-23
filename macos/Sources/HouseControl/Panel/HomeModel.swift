@@ -46,6 +46,8 @@ final class HomeModel {
     private(set) var energy = EnergyState()
     /// The thermostat's reading in °C; nil without one.
     private(set) var houseTemp: Double?
+    /// Off: what is linked to nothing real shows "Not linked" instead of being simulated (Settings).
+    var simulatesUnlinked = true
 
     /// The group the device list shows: "all" or a group id.
     private(set) var room = "all"
@@ -112,6 +114,15 @@ final class HomeModel {
     func onCount(in group: String) -> Int {
         config.lights.filter { (group == "all" || $0.room == group) && light($0.id).on }.count
     }
+
+    /// A lamp or an AC linked to nothing real, while nothing is simulated: it cannot be switched.
+    func notLinked(_ id: String) -> Bool {
+        guard !simulatesUnlinked else { return false }
+        return config.light(id).map { !$0.linked } ?? config.ac(id).map { !$0.linked } ?? false
+    }
+
+    /// The power flow has no sensors and is not simulated either.
+    var energyNotLinked: Bool { !simulatesUnlinked && config.energy?.simulated == true }
 
     func inScope(_ room: String) -> Bool { self.room == "all" || room == self.room }
 

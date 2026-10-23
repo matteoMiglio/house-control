@@ -179,7 +179,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     // Tap toggles; dragging sideways dims (HomeKit-style).
     let gesture = null;
     el.addEventListener('pointerdown', (ev) => {
-      if (ev.target.closest('.tile-more') || ev.button !== 0) return;
+      if (ev.target.closest('.tile-more') || ev.button !== 0 || store.notLinked(cfg.id)) return;
       el.setPointerCapture(ev.pointerId);
       const s = state.lights[cfg.id];
       gesture = { x: ev.clientX, y: ev.clientY, start: s.on ? s.brightness : 0, moved: false, step: null };
@@ -228,11 +228,14 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
       el, cfg, kind: 'light',
       update() {
         const s = state.lights[cfg.id];
+        const unlinked = store.notLinked(cfg.id);
+        const status = unlinked ? 'Not linked' : lightStatus(cfg, s);
         el.classList.toggle('on', s.on);
+        el.classList.toggle('unlinked', unlinked);
         el.style.setProperty('--c', css(lightColor(s, tmp)));
         el.style.setProperty('--level', s.on ? String(s.brightness) : '0');
         // On a phone the group heading above the tile already names the room.
-        sub.textContent = ui.room === 'all' && !isPhone ? `${lightStatus(cfg, s)} · ${roomName.get(cfg.room)}` : lightStatus(cfg, s);
+        sub.textContent = ui.room === 'all' && !isPhone ? `${status} · ${roomName.get(cfg.room)}` : status;
       },
     };
   }
@@ -247,7 +250,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
       const s = state.acs[cfg.id];
       store.setAC(cfg.id, { on: true, target: s.target + d });
     };
-    const el = h('div.tile.ac', { role: 'button', tabindex: 0, 'aria-label': cfg.name, onclick: () => openSheet({ kind: 'ac', id: cfg.id }) },
+    const el = h('div.tile.ac', { role: 'button', tabindex: 0, 'aria-label': cfg.name, onclick: () => { if (!store.notLinked(cfg.id)) openSheet({ kind: 'ac', id: cfg.id }); } },
       bubble,
       h('div.tile-text', h('div.tile-name', cfg.name), sub),
       h('div.stepper',
@@ -255,7 +258,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
         value,
         h('button', { 'aria-label': 'Warmer', onclick: step(1) }, icon('plus', 15, 2.2))),
       h('button.mini-power', { 'aria-label': `${cfg.name} power`, onclick: (e) => { e.stopPropagation(); haptic('medium'); store.setAC(cfg.id, { on: !state.acs[cfg.id].on }); } }, icon('power', 16, 2.2)));
-    el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') openSheet({ kind: 'ac', id: cfg.id }); });
+    el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && !store.notLinked(cfg.id)) openSheet({ kind: 'ac', id: cfg.id }); });
     let shownMode = null;
     return {
       el, cfg, kind: 'ac',
@@ -263,10 +266,12 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
         const s = state.acs[cfg.id];
         el.classList.toggle('on', s.on);
         el.classList.toggle('idle', s.on && s.idle);
+        el.classList.toggle('unlinked', store.notLinked(cfg.id));
         el.style.setProperty('--c', MODE_COLORS[s.mode]);
         if (shownMode !== s.mode) { bubble.replaceChildren(icon(s.mode, 19)); shownMode = s.mode; }
         value.textContent = `${s.target}°`;
-        sub.textContent = `${!s.on ? 'Off' : s.idle ? 'Idle' : MODE_LABEL[s.mode]} · Room ${s.roomTemp.toFixed(isPhone ? 0 : 1)}°`;
+        sub.textContent = store.notLinked(cfg.id) ? 'Not linked'
+          : `${!s.on ? 'Off' : s.idle ? 'Idle' : MODE_LABEL[s.mode]} · Room ${s.roomTemp.toFixed(isPhone ? 0 : 1)}°`;
       },
     };
   }
@@ -292,7 +297,8 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
         el.classList.toggle('charged', has.battery && Number.isFinite(e.charge));
         level.style.setProperty('--level', Number.isFinite(e.charge) ? String(e.charge / 100) : '0');
         level.style.background = chargeColor(e.charge);
-        sub.textContent = energyStatus(e, config.energy);
+        el.classList.toggle('unlinked', store.energyNotLinked);
+        sub.textContent = store.energyNotLinked ? 'Not linked' : energyStatus(e, config.energy);
       },
     };
   }
@@ -304,6 +310,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
   const energyIn = (room) => room === 'all' || room === config.energy?.battery?.room;
 
   function toggleLight(id) {
+    if (store.notLinked(id)) return;
     haptic('light');
     world?.lights.get(id)?.bump();
     store.toggleLight(id);
@@ -497,6 +504,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
   function energySheet() {
     const has = energyHas(config.energy);
     const simulated = !Object.keys(config.energy.sensors).length;
+    const unlinked = store.energyNotLinked;
     const num = h('span.num');
     const unit = h('small');
     const big = h('div.big', num, unit);
@@ -512,11 +520,13 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     // The charge is the big number when there are no panels.
     const charge = has.battery && has.solar ? row('Charge', FLOW_COLORS.battery) : null;
     const nodes = [
-      sheetHead(energyName(config.energy), h('div.sheet-sub', has.solar ? 'Production' : 'Charge', ' · ', h('b', simulated ? 'Simulated' : 'Live'),
+      sheetHead(energyName(config.energy), h('div.sheet-sub', has.solar ? 'Production' : 'Charge', ' · ', h('b', !simulated ? 'Live' : unlinked ? 'Not linked' : 'Simulated'),
         simulated ? null : h('span.live'))),
       h('div.readout', big),
       h('div.dori.energy-rows', [use, grid, battery, charge].filter(Boolean).map((r) => r.el)),
-      h('div.sheet-note', icon(has.solar ? 'sun' : 'battery', 20), simulated
+      h('div.sheet-note', icon(has.solar ? 'sun' : 'battery', 20), unlinked
+        ? 'No sensor is linked, and simulation is off in Settings. Link them in Edit Home → Solar & battery.'
+        : simulated
         ? 'Simulated until a sensor is linked: a sunny day passes in six minutes. Link them in Edit Home → Solar & battery.'
         : 'Read from the sensors linked in Edit Home → Solar & battery, as they report.'),
     ];

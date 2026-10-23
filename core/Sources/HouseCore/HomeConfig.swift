@@ -15,6 +15,8 @@ public struct HomeConfig: Equatable, Sendable {
         public let id, name, room, type: String
         /// Which of "brightness", "temp", "color" it supports; none for a plain smart plug.
         public let capabilities: [String]
+        /// Linked to a real device (otherwise simulated, or "Not linked").
+        public let linked: Bool
 
         public var dimmable: Bool { capabilities.contains("brightness") }
         /// Brightness, white or colour can be set: the lamp has a sheet.
@@ -29,6 +31,8 @@ public struct HomeConfig: Equatable, Sendable {
     public struct AC: Identifiable, Equatable, Sendable {
         public let id, name, room: String
         public let min, max: Double
+        /// Linked to a real device (otherwise simulated, or "Not linked").
+        public let linked: Bool
     }
 
     public struct Scene: Identifiable, Equatable, Sendable {
@@ -64,14 +68,16 @@ public struct HomeConfig: Equatable, Sendable {
         lights = unique((plan["lights"] as? [[String: Any]] ?? []).compactMap { l in
             guard let id = l["id"] as? String else { return nil }
             return Light(id: id, name: text(l["name"]) ?? id, room: l["room"] as? String ?? "",
-                         type: l["type"] as? String ?? "ceiling", capabilities: l["capabilities"] as? [String] ?? [])
+                         type: l["type"] as? String ?? "ceiling", capabilities: l["capabilities"] as? [String] ?? [],
+                         linked: Self.isLinked(l))
         })
         acs = unique((plan["acs"] as? [[String: Any]] ?? []).compactMap { a in
             guard let id = a["id"] as? String else { return nil }
             // A set-point range the wrong way round (or empty) still makes a usable one.
             let low = number(a["min"]) ?? 16, high = number(a["max"]) ?? 30
             return AC(id: id, name: text(a["name"]) ?? id, room: a["room"] as? String ?? "",
-                      min: Swift.min(low, high), max: Swift.max(high, low, Swift.min(low, high) + 1))
+                      min: Swift.min(low, high), max: Swift.max(high, low, Swift.min(low, high) + 1),
+                      linked: Self.isLinked(a))
         })
         scenes = unique((plan["scenes"] as? [[String: Any]] ?? []).compactMap { s in
             guard let id = s["id"] as? String, !id.isEmpty else { return nil }
@@ -83,6 +89,14 @@ public struct HomeConfig: Equatable, Sendable {
         let lights = lights
         groups = rooms + (outsideIsArea && lights.contains { $0.room == Self.outsideId }
             ? [Group(id: Self.outsideId, name: "Outside", outside: true)] : [])
+    }
+
+    /// A lamp or an AC as the plan writes it is linked to a real device (config.js `isLinked`).
+    public static func isLinked(_ device: [String: Any]) -> Bool {
+        if let link = device["link"] as? [String: Any], let service = link["service"] as? String, !service.isEmpty,
+           let id = link["id"] as? String, !id.isEmpty { return true }
+        if let id = (device["tuya"] as? [String: Any])?["deviceId"] as? String, !id.isEmpty { return true }
+        return false
     }
 
     public func light(_ id: String) -> Light? { lights.first { $0.id == id } }

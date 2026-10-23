@@ -518,10 +518,12 @@ private struct ACChip: View {
         let s = home.ac(cfg.id)
         let rgb = PanelColors.mode(s.mode)
         let lit = s.on && !s.idle
+        let unlinked = home.notLinked(cfg.id)
         ChipFace(on: lit, color: rgb) {
             HStack(spacing: 6) {
                 Bubble(icon: s.mode, on: s.on, color: rgb, ink: Color(red: 6 / 255, green: 22 / 255, blue: 44 / 255), outlined: s.idle)
-                ChipText(name: cfg.name, sub: "\(PanelColors.acState(s)) · \(Int(s.roomTemp.rounded()))° inside", on: s.on, color: rgb)
+                ChipText(name: cfg.name, sub: unlinked ? "Not linked" : "\(PanelColors.acState(s)) · \(Int(s.roomTemp.rounded()))° inside",
+                         on: s.on, color: rgb)
                 ChipButton(icon: "minus", label: "Cooler") { home.setAC(cfg.id, ["on": true, "target": s.target - 1]) }
                 Text("\(Int(s.target))°").font(.system(size: 14, weight: .semibold).monospacedDigit())
                     .foregroundStyle(s.on ? P.text : P.faint).frame(minWidth: 30)
@@ -539,7 +541,9 @@ private struct ACChip: View {
                 .padding(.leading, 2)
                 .accessibilityLabel("\(cfg.name) power")
             }
+            .disabled(unlinked)
         }
+        .opacity(unlinked ? 0.55 : 1)
     }
 }
 
@@ -553,10 +557,11 @@ private struct EnergyChip: View {
         let s = model.home.energy
         let on = (s.solar ?? 0) >= EnergyState.idleWatts
         let rgb = RGB(PanelColors.solar)
+        let status = model.home.energyNotLinked ? "Not linked" : cfg.status(s)
         ChipFace(on: on, color: rgb) {
             HStack(spacing: 6) {
                 Bubble(icon: cfg.hasSolar ? "sun" : "battery", on: on, color: rgb, ink: Color(red: 36 / 255, green: 21 / 255, blue: 3 / 255))
-                ChipText(name: cfg.name, sub: cfg.status(s), on: on, color: rgb)
+                ChipText(name: cfg.name, sub: status, on: on, color: rgb)
             }
         }
         .overlay {
@@ -570,10 +575,11 @@ private struct EnergyChip: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .allowsHitTesting(false)
         }
+        .opacity(model.home.energyNotLinked ? 0.55 : 1)
         .onTapGesture { model.onOpen?("energy") }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(cfg.name)
-        .accessibilityValue(cfg.status(s))
+        .accessibilityValue(status)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { model.onOpen?("energy") }
     }
@@ -608,11 +614,12 @@ private struct LightChip: View {
         let home = model.home
         let s = home.light(cfg.id)
         let rgb = PanelColors.light(s)
+        let unlinked = home.notLinked(cfg.id)
         GeometryReader { geo in
             ChipFace(on: s.on, color: rgb) {
                 HStack(spacing: 8) {
                     Bubble(icon: cfg.icon, on: s.on, color: rgb, ink: Color(red: 36 / 255, green: 21 / 255, blue: 3 / 255))
-                    ChipText(name: cfg.name, sub: "\(s.status(cfg)) · \(home.groupName(cfg.room))", on: s.on, color: rgb)
+                    ChipText(name: cfg.name, sub: "\(unlinked ? "Not linked" : s.status(cfg)) · \(home.groupName(cfg.room))", on: s.on, color: rgb)
                 }
             }
             .overlay {
@@ -625,7 +632,7 @@ private struct LightChip: View {
             }
             .scaleEffect(drag.pressed && !drag.dragging ? 0.96 : 1)
             .animation(P.spring, value: drag.pressed)
-            .hoverCursor(cfg.dimmable ? .resizeLeftRight : .arrow)
+            .hoverCursor(cfg.dimmable && !unlinked ? .resizeLeftRight : .arrow)
             // Click toggles, dragging sideways dims: the same gesture as the panel's tiles.
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { value in
@@ -646,13 +653,14 @@ private struct LightChip: View {
                         model.onBump?(cfg.id)
                         home.toggleLight(cfg.id, bump: false) // the island's own model nods, not the panel's
                     }
-                })
+                }, isEnabled: !unlinked)
             .onDisappear { drag.pressed = false; drag.dragging = false }
         }
         .frame(height: 44)
         .frame(maxWidth: .infinity)
+        .opacity(unlinked ? 0.55 : 1)
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
+        .accessibilityAddTraits(unlinked ? [] : .isButton)
         .accessibilityAction { home.toggleLight(cfg.id) }
     }
 }

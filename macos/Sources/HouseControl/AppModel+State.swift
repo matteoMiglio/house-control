@@ -25,8 +25,10 @@ extension AppModel {
                               })
         store.onChange = { [weak self] change in self?.schedulePush(change) }
         store.onDeviceError = { [weak self] id, message in self?.home.deviceError(id, message) }
+        store.simulatesUnlinked = simulatesUnlinked
         store.startSimulation()
         homeStore = store
+        home.simulatesUnlinked = simulatesUnlinked
         home.load(plan: plan ?? [:], store: store)
         islandModel?.reset()
         updateStatus(store.summary)

@@ -1,5 +1,5 @@
 import { post, call, isNative } from './bridge.js';
-import { ENERGY_ROLES } from './config.js';
+import { ENERGY_ROLES, isLinked } from './config.js';
 import { energySimulation, stepEnergy } from './energy.js';
 
 const STORAGE_KEY = 'house-control:state:v1';
@@ -39,6 +39,11 @@ export function createStore(config) {
   for (const a of config.acs) state.acs[a.id] = defaultAC(a, config.outdoorTemp);
   // What each real AC can do, as reported by the native side. A simulated AC can do everything.
   const features = {};
+  // Off (the iPhone's Settings): the lamps and ACs linked to nothing real stay off and cannot be
+  // switched, and a power flow without sensors is not made up. In the Mac app, the app does that.
+  let simulates = nativeState || window.__HOUSE_BOOT__?.simulateUnlinked !== false;
+  const linked = (id) => isLinked(lightCfg.get(id) || acCfg.get(id));
+  const live = (id) => simulates || linked(id);
 
   // Takes a new reading of the energy sensors; a role reported as null is not known any more.
   // Returns whether anything changed.
@@ -61,7 +66,7 @@ export function createStore(config) {
     energyAt = now;
     return takeEnergy(stepEnergy(energySim, now, seconds));
   }
-  if (energySim) simulateEnergy();
+  if (energySim && simulates) simulateEnergy();
 
   const take = (saved) => {
     for (const [id, s] of Object.entries(saved.lights || {})) if (state.lights[id]) Object.assign(state.lights[id], s);
@@ -81,6 +86,13 @@ export function createStore(config) {
   } catch { /* storage unavailable: start from defaults */ }
   const booted = nativeState && window.__HOUSE_BOOT__?.state;
   if (booted) { take(booted); takeEnergy(booted.energy); restored = true; }
+  // What was saved while simulating is not shown once simulation is off.
+  function switchOffUnlinked() {
+    for (const id of Object.keys(state.lights)) if (!linked(id)) state.lights[id].on = false;
+    for (const id of Object.keys(state.acs)) if (!linked(id)) state.acs[id].on = false;
+    if (energySim) state.energy = {};
+  }
+  if (!simulates) switchOffUnlinked();
   // The last intent sent to the app, and the last one its state took in (see sync).
   let sent = 0;
 
@@ -173,7 +185,7 @@ export function createStore(config) {
 
   function writeLight(id, patch, { remote = false } = {}) {
     const cur = state.lights[id];
-    if (!cur) return false;
+    if (!cur || !live(id)) return false;
     const clean = sanitizeLight(id, patch);
     // Only what actually changed is worth sending to the device.
     const diff = Object.fromEntries(Object.entries(clean).filter(([k, v]) => cur[k] !== v));
@@ -187,7 +199,7 @@ export function createStore(config) {
   function writeAC(id, patch, { remote = false } = {}) {
     const cur = state.acs[id];
     const cfg = acCfg.get(id);
-    if (!cur) return false;
+    if (!cur || !live(id)) return false;
     const clean = { ...patch };
     if ('target' in clean) clean.target = clamp(Math.round(clean.target), cfg.min, cfg.max);
     // Switched on here: running until the thermostat says otherwise at the next poll.
@@ -232,6 +244,24 @@ export function createStore(config) {
     onDeviceError: null,
     /** Who is changing things right now when it is not the person at this screen ("ChatGPT"…). */
     source: null,
+
+    /** Lamps, ACs and a power flow linked to nothing real are simulated (else "Not linked"). */
+    get simulatesUnlinked() { return simulates; },
+    setSimulatesUnlinked(on) {
+      if (nativeState || simulates === on) return;
+      simulates = on;
+      if (on) {
+        energyAt = 0;
+        if (energySim) simulateEnergy();
+      } else {
+        switchOffUnlinked();
+      }
+      emit({ type: 'bulk' });
+    },
+    /** A lamp or an AC linked to nothing real, while nothing is simulated: it cannot be switched. */
+    notLinked(id) { return !live(id); },
+    /** The power flow has no sensors and is not simulated either. */
+    get energyNotLinked() { return !simulates && Boolean(energySim); },
 
     /** What the panel may offer for this AC: modes, fan speeds, and the optional extras. */
     acFeatures(id) {
@@ -340,6 +370,7 @@ export function createStore(config) {
     for (const [id, a] of Object.entries(state.acs)) {
       const cfg = acCfg.get(id);
       if (cfg.tuya?.sensorId || cfg.sensor?.id || cfg.link?.id) continue; // a real sensor or unit reports this room
+      if (!live(id)) continue;
       const ambient = Math.min(config.outdoorTemp - 2, 27);
       const goal = a.on && a.mode !== 'fan' ? a.target : ambient;
       const step = a.on ? 0.2 : 0.1;
@@ -347,7 +378,7 @@ export function createStore(config) {
       if (next !== a.roomTemp) { a.roomTemp = Math.round(next * 10) / 10; any = true; }
     }
     if (any) persist();
-    if (energySim && simulateEnergy()) any = true;
+    if (energySim && simulates && simulateEnergy()) any = true;
     if (any) for (const fn of listeners) fn({ type: 'tick' });
   }, 3000);
 

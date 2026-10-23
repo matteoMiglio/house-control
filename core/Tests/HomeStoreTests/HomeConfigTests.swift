@@ -167,6 +167,16 @@ struct HomeConfigTests {
         #expect(config.groups == [HomeConfig.Group(id: "outside", name: "Patio", outside: false)])
     }
 
+    @Test func aDeviceIsLinkedByItsLinkOrItsTuyaId() {
+        let config = HomeConfig(plan: [
+            "lights": [["id": "ha", "link": ["service": "ha", "id": "light.x"]], ["id": "tuya", "tuya": ["deviceId": "abc"]],
+                       ["id": "half", "link": ["service": "ha", "id": ""]], ["id": "none"]],
+            "acs": [["id": "ac", "link": ["service": "ha", "id": "climate.x"]], ["id": "fake"]],
+        ])
+        #expect(config.lights.map(\.linked) == [true, true, false, false])
+        #expect(config.acs.map(\.linked) == [true, false])
+    }
+
     @Test func stateAndStatusComeFromTheStore() {
         let store = HomeStore(plan: ["lights": [["id": "a", "capabilities": ["brightness"]], ["id": "p"]]], file: nil, transmit: nil)
         store.setLight("a", ["on": true, "brightness": 0.42])

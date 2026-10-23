@@ -74,6 +74,8 @@ final class AppModel: NSObject {
     var islandShown = false
     /// What the closed island's right ear shows: Auto, AC or Solar (Settings).
     var islandEar = AppModel.storedIslandEar
+    /// Lamps, ACs and a power flow linked to nothing real are simulated, or show "Not linked" (Settings).
+    var simulatesUnlinked = AppModel.storedSimulatesUnlinked
     /// The main window's sidebar: which screen it shows, and whether it is shown at all (left as
     /// the user leaves it, with the toolbar's sidebar button).
     var section: MainSection = .home
@@ -526,6 +528,20 @@ final class AppModel: NSObject {
         if ProcessInfo.processInfo.environment["HOUSE_DATA_DIR"] == nil { UserDefaults.standard.set(choice.rawValue, forKey: "islandEar") }
         islandEar = choice
         islandModel?.earChoice = choice
+    }
+
+    /// On unless turned off in Settings (or by HOUSE_SIMULATE=0 for one run).
+    private static var storedSimulatesUnlinked: Bool {
+        if let raw = ProcessInfo.processInfo.environment["HOUSE_SIMULATE"] { return raw != "0" }
+        return UserDefaults.standard.object(forKey: "simulateUnlinked") as? Bool ?? true
+    }
+
+    func setSimulatesUnlinked(_ on: Bool) {
+        // A run with its own data folder (HOUSE_DATA_DIR, for tests) leaves the real setting alone.
+        if ProcessInfo.processInfo.environment["HOUSE_DATA_DIR"] == nil { UserDefaults.standard.set(on, forKey: "simulateUnlinked") }
+        simulatesUnlinked = on
+        homeStore?.simulatesUnlinked = on
+        home.simulatesUnlinked = on
     }
 
     // MARK: - Open at Login

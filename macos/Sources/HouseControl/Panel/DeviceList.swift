@@ -248,6 +248,8 @@ struct LightTile: View {
         let rgb = PanelColors.light(s)
         let c = rgb.color
         let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        let unlinked = model.notLinked(cfg.id)
+        let status = unlinked ? "Not linked" : s.status(cfg)
         GeometryReader { geo in
             HStack(spacing: 11) {
                 Icon(cfg.icon, size: 19)
@@ -257,13 +259,13 @@ struct LightTile: View {
                     .shadow(color: s.on ? c : .clear, radius: 11)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(cfg.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(P.text).lineLimit(1)
-                    Text(model.room == "all" ? "\(s.status(cfg)) · \(model.groupName(cfg.room))" : s.status(cfg))
+                    Text(model.room == "all" ? "\(status) · \(model.groupName(cfg.room))" : status)
                         .font(.system(size: 11.5).monospacedDigit())
                         .foregroundStyle(s.on ? rgb.withWhite(0.45) : P.muted)
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                if cfg.hasSheet {
+                if cfg.hasSheet, !unlinked {
                     MoreButton(visible: hover.on) { model.openSheet(.light(cfg.id)) }
                         .accessibilityLabel("\(cfg.name) settings")
                 }
@@ -290,19 +292,20 @@ struct LightTile: View {
             .scaleEffect(drag.pressed && !drag.dragging ? 0.96 : 1)
             .contentShape(shape)
             .onHover { hover.on = $0 }
-            .hoverCursor(dimmable ? .resizeLeftRight : .arrow)
-            .gesture(press(width: geo.size.width))
+            .hoverCursor(dimmable && !unlinked ? .resizeLeftRight : .arrow)
+            .gesture(press(width: geo.size.width), isEnabled: !unlinked)
             .animation(P.spring, value: drag.pressed)
             .animation(.easeOut(duration: 0.26), value: s.on)
         }
         .frame(height: 68)
         .frame(maxWidth: .infinity)
+        .opacity(unlinked ? 0.55 : 1)
         // Gone mid-press (the room changed, the panel closed): not left pressed for next time.
         .onDisappear { drag.pressed = false; drag.dragging = false }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(cfg.name)
-        .accessibilityValue(model.light(cfg.id).status(cfg))
-        .accessibilityAddTraits(.isButton)
+        .accessibilityValue(status)
+        .accessibilityAddTraits(unlinked ? [] : .isButton)
         .accessibilityAction { model.toggleLight(cfg.id) }
     }
 
@@ -370,6 +373,7 @@ struct ACTile: View {
         let lit = s.on && !s.idle
         let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
         let bubble = RoundedRectangle(cornerRadius: 13, style: .continuous)
+        let unlinked = model.notLinked(cfg.id)
         HStack(spacing: 11) {
             Icon(s.mode, size: 19)
                 .foregroundStyle(lit ? Color(red: 6 / 255, green: 22 / 255, blue: 44 / 255) : s.on ? c : P.muted)
@@ -379,7 +383,7 @@ struct ACTile: View {
                 .shadow(color: lit ? c : .clear, radius: 11)
             VStack(alignment: .leading, spacing: 2) {
                 Text(cfg.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(P.text).lineLimit(1)
-                Text("\(PanelColors.acState(s)) · Room \(String(format: "%.1f", s.roomTemp))°")
+                Text(unlinked ? "Not linked" : "\(PanelColors.acState(s)) · Room \(String(format: "%.1f", s.roomTemp))°")
                     .font(.system(size: 11.5).monospacedDigit())
                     .foregroundStyle(s.on ? rgb.withWhite(0.45) : P.muted)
                     .lineLimit(1)
@@ -406,6 +410,7 @@ struct ACTile: View {
             .buttonStyle(PressScale(scale: 0.88))
             .accessibilityLabel("\(cfg.name) power")
         }
+        .disabled(unlinked)
         .padding(.horizontal, 12)
         .frame(height: 68)
         .background {
@@ -418,8 +423,9 @@ struct ACTile: View {
         .overlay(shape.strokeBorder(lit ? c.opacity(0.42) : P.line))
         .shadow(color: lit ? c.opacity(0.5) : .clear, radius: 10, y: 12)
         .contentShape(shape)
-        .onTapGesture { model.openSheet(.ac(cfg.id)) }
+        .onTapGesture { if !unlinked { model.openSheet(.ac(cfg.id)) } }
         .onHover { hover.on = $0 }
+        .opacity(unlinked ? 0.55 : 1)
         .animation(.easeOut(duration: 0.26), value: s.on)
         .animation(.easeOut(duration: 0.26), value: s.idle)
         .animation(.easeOut(duration: 0.26), value: s.mode)
@@ -439,6 +445,7 @@ struct EnergyTile: View {
         let rgb = RGB(PanelColors.solar)
         let c = rgb.color
         let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+        let status = model.energyNotLinked ? "Not linked" : cfg.status(s)
         HStack(spacing: 11) {
             Icon(cfg.hasSolar ? "sun" : "battery", size: 19)
                 .foregroundStyle(on ? Color(red: 36 / 255, green: 21 / 255, blue: 3 / 255) : P.muted)
@@ -447,7 +454,7 @@ struct EnergyTile: View {
                 .shadow(color: on ? c : .clear, radius: 11)
             VStack(alignment: .leading, spacing: 2) {
                 Text(cfg.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(P.text).lineLimit(1)
-                Text(cfg.status(s))
+                Text(status)
                     .font(.system(size: 11.5).monospacedDigit())
                     .foregroundStyle(on ? rgb.withWhite(0.45) : P.muted)
                     .lineLimit(1)
@@ -477,10 +484,11 @@ struct EnergyTile: View {
         .contentShape(shape)
         .onTapGesture { model.openSheet(.energy) }
         .onHover { hover.on = $0 }
+        .opacity(model.energyNotLinked ? 0.55 : 1)
         .animation(.easeOut(duration: 0.26), value: on)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(cfg.name)
-        .accessibilityValue(cfg.status(s))
+        .accessibilityValue(status)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { model.openSheet(.energy) }
     }
