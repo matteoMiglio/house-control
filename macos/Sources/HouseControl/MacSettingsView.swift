@@ -27,12 +27,6 @@ struct MacSettingsView: View {
                             Toggle("Use the island instead of the menu bar icon", isOn: Binding(get: { model.islandShown }, set: { model.setIsland($0) }))
                                 .labelsHidden()
                         }
-                        Divider().overlay(Theme.line).padding(.leading, 68).padding(.trailing, 18)
-                        SettingsRow(symbol: "wand.and.stars", title: "Simulate devices that aren't linked",
-                                    detail: "Lamps and air conditioners not linked to a real device, and solar without sensors, behave as if they were real. Turn this off and they show “Not linked” instead.") {
-                            Toggle("Simulate devices that aren't linked", isOn: Binding(get: { model.simulatesUnlinked }, set: { model.setSimulatesUnlinked($0) }))
-                                .labelsHidden()
-                        }
                         // Only where there is a choice: the island in use, and panels to read.
                         if model.islandShown, model.home.config.energy?.hasSolar == true {
                             Divider().overlay(Theme.line).padding(.leading, 68).padding(.trailing, 18)
@@ -55,10 +49,10 @@ struct MacSettingsView: View {
                     SectionTitle("Floor plan")
                     Card {
                         SettingsRow(symbol: "house", title: model.homeName,
-                                    detail: "The floor plan and device layout for your home.") { EmptyView() }
+                                    detail: "The home shown now. Switch to a demo, import, export or remove a home in Floor Plans.") { EmptyView() }
                         // One row of actions, under the text they belong to.
                         HStack(spacing: 8) {
-                            Button("Load Floor Plan…") { model.loadPlan() }
+                            Button("Manage Floor Plans…") { model.router.show(.homes) }
                             Button("Reveal Plan File") { model.revealPlan() }
                             Button("Reveal Device Log") { model.revealLog() }
                         }

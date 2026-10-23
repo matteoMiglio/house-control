@@ -99,6 +99,11 @@ public struct HomeConfig: Equatable, Sendable {
         return false
     }
 
+    /// How many lamps, ACs and energy sensors reach something real.
+    public var linkedCount: Int {
+        lights.filter(\.linked).count + acs.filter(\.linked).count + (energy?.sensors.count ?? 0)
+    }
+
     public func light(_ id: String) -> Light? { lights.first { $0.id == id } }
     public func ac(_ id: String) -> AC? { acs.first { $0.id == id } }
     public func group(_ id: String) -> Group? { groups.first { $0.id == id } }

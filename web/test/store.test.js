@@ -96,19 +96,24 @@ test('without simulation, lamps and ACs linked to nothing real stay off and are 
     lights: [...config.lights, { id: 'real', capabilities: [], link: { service: 'ha', id: 'light.real' } }],
     acs: [{ id: 'ac', min: 16, max: 30 }],
   };
-  const store = createStore(plan);
-  store.setLight('lamp', { on: true });
-  store.setAC('ac', { on: true });
-  store.setSimulatesUnlinked(false);
-  assert.equal(store.state.lights.lamp.on, false);
-  assert.equal(store.state.acs.ac.on, false);
-  assert.ok(store.notLinked('lamp') && store.notLinked('ac') && !store.notLinked('real'));
-  store.setAllLights(true);
-  assert.equal(store.state.lights.lamp.on, false);
-  assert.equal(store.state.lights.real.on, true);
-  store.setSimulatesUnlinked(true);
-  store.setLight('lamp', { on: true });
-  assert.equal(store.state.lights.lamp.on, true);
+  window.__HOUSE_BOOT__.simulateUnlinked = false;
+  try {
+    const store = createStore(plan);
+    store.setLight('lamp', { on: true });
+    store.setAC('ac', { on: true });
+    assert.equal(store.state.lights.lamp.on, false);
+    assert.equal(store.state.acs.ac.on, false);
+    assert.ok(store.notLinked('lamp') && store.notLinked('ac') && !store.notLinked('real'));
+    store.setAllLights(true);
+    assert.equal(store.state.lights.lamp.on, false);
+    assert.equal(store.state.lights.real.on, true);
+  } finally {
+    delete window.__HOUSE_BOOT__.simulateUnlinked;
+  }
+  const simulated = createStore(plan);
+  simulated.setLight('lamp', { on: true });
+  assert.equal(simulated.state.lights.lamp.on, true);
+  assert.ok(!simulated.notLinked('lamp'));
 });
 
 test('with simulation off from the start, what was saved while simulating is not shown', () => {

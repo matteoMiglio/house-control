@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// What the main window's sidebar shows.
-enum MainSection: Hashable { case home, editor, connections, agent, pairing, settings }
+enum MainSection: Hashable { case home, homes, editor, connections, agent, pairing, settings }
 
 /// Where the panel page is on screen. There is one such page (its 3D model, its state, its
 /// device commands), lent to whichever of the two places shows it.

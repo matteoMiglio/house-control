@@ -79,8 +79,6 @@ final class AppModel {
     private(set) var hasCustomPlan: Bool
     private(set) var customPlanName: String?
     private(set) var linkedDevices = 0
-    /// Lamps, ACs and a power flow linked to nothing real are simulated, or show "Not linked" (Settings).
-    private(set) var simulatesUnlinked = UserDefaults.standard.object(forKey: "simulateUnlinked") as? Bool ?? true
     /// Goes up whenever the plan on disk changed, so views reading `currentPlan` redraw.
     private(set) var planVersion = 0
 
@@ -245,12 +243,15 @@ final class AppModel {
         boot["smartLife"] = hub.smartLife?.smartLifeInfo
         #endif
         if let device = ProcessInfo.processInfo.environment["HOUSE_OPEN_DEVICE"] { boot["openDevice"] = device }
-        boot["simulateUnlinked"] = simulatesUnlinked
+        // A demo simulates everything; My home only shows what is real, and "Not linked" for the rest.
+        boot["simulateUnlinked"] = plans.isDemo
         return boot
     }
 
     private func handle(_ message: [String: Any]) {
         switch message["type"] as? String {
+        case "selectPlan":
+            if let plan = message["plan"] as? String { selectPlan(plan) }
         case "ready":
             pageReady = true
             widgets.isReady = true
@@ -593,12 +594,6 @@ final class AppModel {
         guard let pairing = SyncPairing(link: url.absoluteString) else { return false }
         pair(pairing)
         return true
-    }
-
-    func setSimulatesUnlinked(_ on: Bool) {
-        UserDefaults.standard.set(on, forKey: "simulateUnlinked")
-        simulatesUnlinked = on
-        web.call("setSimulateUnlinked", on)
     }
 
     func pair(_ pairing: SyncPairing) {

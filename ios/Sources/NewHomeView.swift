@@ -55,7 +55,7 @@ struct NewHomeView: View {
                                 .accessibilityAddTraits(template == option.id ? .isSelected : [])
                             }
                         }
-                        Footnote(text: "The editor opens next: drag rooms and lamps with a finger, pinch to zoom. Lamps and air conditioners stay simulated until you link them to your real devices.")
+                        Footnote(text: "The editor opens next: drag rooms and lamps with a finger, pinch to zoom. Lamps and air conditioners show “Not linked” until you link them to your real devices.")
                     }
                     Button {
                         if model.hasCustomPlan { confirmReplace = true } else { create() }

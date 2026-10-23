@@ -546,3 +546,33 @@ g.p-out.sel rect { stroke: #6aa6ff; stroke-width: 0.1; }
 .row.off { opacity: 0.5; }
 .plan.panning, .plan.panning * { cursor: grab !important; }
 .plan.grabbing, .plan.grabbing * { cursor: grabbing !important; }
+
+/* Saving a demo as My home: asked first. A card in the middle; a sheet from the bottom on a phone. */
+.ask {
+  position: fixed; inset: 0; z-index: 100;
+  display: grid; place-items: center; padding: 16px;
+  background: rgba(4, 7, 15, 0.55);
+  opacity: 0; transition: opacity 180ms;
+}
+.ask.open { opacity: 1; }
+.ask-card {
+  width: min(380px, 100%); padding: 20px 20px 16px; border-radius: 18px;
+  background: #151b2c; border: 1px solid var(--line); box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
+  transform: translateY(8px) scale(0.98); transition: transform 240ms var(--spring);
+}
+.ask.open .ask-card { transform: none; }
+.ask-card b { display: block; font-size: 16px; font-weight: 650; color: var(--text); }
+.ask-card p { margin: 8px 0 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+.ask-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.btn.primary.destructive { background: linear-gradient(180deg, #ff6b61, #e5483f); }
+.btn.primary.destructive:hover { background: linear-gradient(180deg, #ff7d74, #ec554c); }
+html.ios .ask { place-items: end stretch; padding: 0; }
+html.ios .ask-card {
+  width: 100%; border-radius: 22px 22px 0 0; padding: 22px 18px calc(18px + env(safe-area-inset-bottom));
+  transform: translateY(100%);
+}
+html.ios .ask-card b { font-size: 17px; }
+html.ios .ask-card p { font-size: 14px; }
+html.ios .ask-actions { flex-direction: column-reverse; }
+html.ios .ask-actions .btn { height: 44px; font-size: 15px; }
+@media (prefers-reduced-motion: reduce) { .ask, .ask-card { transition-duration: 1ms; } }

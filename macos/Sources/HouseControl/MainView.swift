@@ -9,8 +9,12 @@ struct MainView: View {
         NavigationSplitView(columnVisibility: $model.sidebar) {
             List(selection: $model.section) {
                 Label("Home", systemImage: "house").tag(MainSection.home)
-                Label("Edit Home", systemImage: "square.and.pencil").tag(MainSection.editor)
-                Label("Connections", systemImage: "link").tag(MainSection.connections)
+
+                Section("Set Up") {
+                    Label("Floor Plans", systemImage: "square.stack.3d.up").tag(MainSection.homes)
+                    Label("Edit Home", systemImage: "square.and.pencil").tag(MainSection.editor)
+                    Label("Connections", systemImage: "link").tag(MainSection.connections)
+                }
 
                 Section("Access") {
                     Label {
@@ -43,6 +47,8 @@ struct MainView: View {
                 }
             }
             .listStyle(.sidebar)
+            // Clear of the title bar's traffic lights and toolbar.
+            .contentMargins(.top, 12, for: .scrollContent)
             .tint(Theme.accent)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 SidebarStatus(model: model)
@@ -51,6 +57,7 @@ struct MainView: View {
         } detail: {
             switch model.section {
             case .home: HomeView(model: model)
+            case .homes: HomesView(model: model)
             case .editor: EditorView(model: model)
             case .connections: ConnectionsView(model: model.connections)
             case .agent: AgentView(agent: model.agent)

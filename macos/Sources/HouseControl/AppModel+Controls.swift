@@ -9,6 +9,7 @@ extension AppModel {
         home.tellPage = { [weak self] function, args in self?.hosts[.primary]?.call(function, arguments: args) }
         home.onGear = { [weak self] in self?.showPlanMenu() }
         home.onAgentBadge = { [weak self] in self?.router.show(.agent) }
+        home.onBackHome = { [weak self] in self?.choosePlan("custom") }
         home.agentLive = agent.isLive
         // Escape closes an open menu, else the sheet, else the panel; it is caught before the page sees it.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -45,13 +46,7 @@ extension AppModel {
     /// The header's gear: the floor plans, and the rest of the app.
     func showPlanMenu() {
         let menu = NSMenu()
-        let current = plans.activePlan
-        if plans.hasCustomPlan {
-            menu.addItem(ClosureMenuItem("My home", checked: current == "custom") { [weak self] in self?.choosePlan("custom") })
-        }
-        for (id, name) in [("home", "Demo · Apartment"), ("studio", "Demo · Studio")] {
-            menu.addItem(ClosureMenuItem(name, checked: current == id) { [weak self] in self?.choosePlan(id) })
-        }
+        addHomeItems(to: menu)
         menu.addItem(.separator())
         menu.addItem(ClosureMenuItem("Open House Control…") { [weak self] in self?.router.show(.home) })
         menu.addItem(ClosureMenuItem("Edit Home…") { [weak self] in self?.router.show(.editor) })
@@ -62,11 +57,48 @@ extension AppModel {
         menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
     }
 
-    private func choosePlan(_ id: String) {
+    static let demos = [("home", "Apartment"), ("studio", "Studio")]
+
+    /// The homes to switch to: My home first, with what it reaches; the demos apart, for trying
+    /// things out; then the Floor Plans screen, where they are managed.
+    func addHomeItems(to menu: NSMenu) {
+        let current = plans.activePlan
+        if let plan = plans.customPlan() {
+            let item = ClosureMenuItem(plans.customPlanName ?? "My home", checked: current == "custom") { [weak self] in self?.choosePlan("custom") }
+            if #available(macOS 14.4, *) { item.subtitle = Self.linkedLine(HomeConfig(plan: plan).linkedCount) }
+            menu.addItem(item)
+            menu.addItem(.separator())
+        }
+        menu.addItem(.sectionHeader(title: "Try a demo"))
+        for (id, name) in Self.demos {
+            menu.addItem(ClosureMenuItem(name, checked: current == id) { [weak self] in self?.choosePlan(id) })
+        }
+        menu.addItem(.separator())
+        menu.addItem(ClosureMenuItem("Manage Floor Plans…") { [weak self] in self?.router.show(.homes) })
+    }
+
+    /// The island's and the menu bar icon's menu: the same homes, one level down.
+    func homesMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: plans.isDemo ? "Home: Demo" : "Home: \(homeName)", action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+        addHomeItems(to: submenu)
+        item.submenu = submenu
+        return item
+    }
+
+    /// "3 linked to real devices", or "Nothing linked yet".
+    static func linkedLine(_ count: Int) -> String {
+        count == 0 ? "Nothing linked yet" : "\(count) linked to real devices"
+    }
+
+    /// Switches home, and says where you are now: a demo is easy to mistake for your own.
+    func choosePlan(_ id: String) {
         guard id != plans.activePlan else { return }
         plans.select(id)
         reloadAll()
         hosts[.editor]?.load()
+        let demo = Self.demos.first { $0.0 == id }?.1
+        home.showToast(demo.map { "Demo · \($0): everything here is simulated" } ?? homeName)
     }
 }
 

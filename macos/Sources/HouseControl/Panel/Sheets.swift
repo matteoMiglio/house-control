@@ -503,7 +503,7 @@ private struct EnergySheet: View {
             .padding(.top, 18)
             Spacer(minLength: 16)
             SheetNote(icon: cfg.hasSolar ? "sun" : "battery", text: model.energyNotLinked
-                ? "No sensor is linked, and simulation is off in Settings. Link them in Edit Home → Solar & battery."
+                ? "No sensor is linked yet. Link them in Edit Home → Solar & battery."
                 : cfg.simulated
                 ? "Simulated until a sensor is linked: a sunny day passes in six minutes. Link them in Edit Home → Solar & battery."
                 : "Read from the sensors linked in Edit Home → Solar & battery, as they report.")

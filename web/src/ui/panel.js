@@ -10,7 +10,7 @@ import {
   IDLE_WATTS, consumption, wattsParts, formatWatts, formatCharge, gridStatus, batteryStatus, batteryLine, energyHas, energyName, energyStatus,
 } from '../energy.js';
 import { AC_SWINGS } from '../store.js';
-import { haptic, isPhone } from '../bridge.js';
+import { haptic, isPhone, isNative, post } from '../bridge.js';
 import { LEVELS, levelDistances } from '../coverage.js';
 import { lampIcon } from '../config.js';
 
@@ -61,6 +61,17 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
   const aiBadge = h('button.ai-badge', { hidden: true, title: 'An AI assistant has access — click to manage', 'aria-label': 'AI access',
     onclick: () => onMenu(aiBadge, 'agent') }, icon('sparkles', 13, 2.2), h('span', 'AI'));
 
+  // Beside the name while a demo is shown: easy to tell from your own home, and one tap away from it.
+  const boot = window.__HOUSE_BOOT__ || {};
+  const demo = isNative && Boolean(boot.plan) && boot.plan !== 'custom';
+  const canLeave = demo && Boolean(boot.hasCustomPlan);
+  const demoPill = !demo ? null : h('button.demo-pill', {
+    disabled: !canLeave,
+    title: canLeave ? 'A demo: everything is simulated' : 'A demo: everything is simulated. Draw your own in Edit home.',
+    'aria-label': canLeave ? 'Demo. Back to My home' : 'Demo',
+    onclick: () => { haptic('light'); post('selectPlan', { plan: 'custom' }); },
+  }, h('span', 'Demo'), canLeave ? h('span.demo-leave', icon('back', 11, 2.6), 'My home') : null);
+
   const scenes = h('div.scenes');
   const rooms = h('div.rooms');
   const listTitle = h('span.title');
@@ -80,7 +91,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
     h('div.tint'),
     h('header.top',
       h('div.home', h('div.home-badge', icon('home', 17)),
-        h('div', h('div.home-name', config.name), homeSub)),
+        h('div', h('div.home-name', h('span', config.name), demoPill), homeSub)),
       aiBadge, isPhone ? null : viewBtn, gear, power),
     isPhone ? viewBtn : null, tooltip, panel, sheet, toastEl);
   const card = h('div.card.booting', h('div.notch'), clip);
@@ -525,7 +536,7 @@ export function createPanel(root, config, store, { onFocus, onMenu }) {
       h('div.readout', big),
       h('div.dori.energy-rows', [use, grid, battery, charge].filter(Boolean).map((r) => r.el)),
       h('div.sheet-note', icon(has.solar ? 'sun' : 'battery', 20), unlinked
-        ? 'No sensor is linked, and simulation is off in Settings. Link them in Edit Home → Solar & battery.'
+        ? 'No sensor is linked yet. Link them in Edit Home → Solar & battery.'
         : simulated
         ? 'Simulated until a sensor is linked: a sunny day passes in six minutes. Link them in Edit Home → Solar & battery.'
         : 'Read from the sensors linked in Edit Home → Solar & battery, as they report.'),

@@ -319,11 +319,17 @@ test('a lamp or an AC under the panels wins the pointer; the panels win over the
 
 test('without simulation, a power flow without sensors is not made up', (t) => {
   t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
-  const store = createStore(plan({ panels: [{ pos: [1, 1], size: [4, 3] }], battery: { pos: [2, 2] } }));
-  assert.ok(Number.isFinite(store.state.energy.solar));
-  store.setSimulatesUnlinked(false);
-  assert.ok(store.energyNotLinked);
-  assert.deepEqual(store.state.energy, {});
-  store.setSimulatesUnlinked(true);
-  assert.ok(!store.energyNotLinked && Number.isFinite(store.state.energy.solar));
+  const energy = { panels: [{ pos: [1, 1], size: [4, 3] }], battery: { pos: [2, 2] } };
+  const simulated = createStore(plan(energy));
+  assert.ok(!simulated.energyNotLinked && Number.isFinite(simulated.state.energy.solar));
+  window.__HOUSE_BOOT__.simulateUnlinked = false;
+  try {
+    const store = createStore(plan(energy));
+    assert.ok(store.energyNotLinked);
+    assert.deepEqual(store.state.energy, {});
+    t.mock.timers.tick(3000);
+    assert.deepEqual(store.state.energy, {});
+  } finally {
+    delete window.__HOUSE_BOOT__.simulateUnlinked;
+  }
 });

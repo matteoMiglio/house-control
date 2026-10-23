@@ -24,7 +24,7 @@ struct HomeSurface: View {
                 let insets = chrome == .menubar ? Self.menubarInsets : EdgeInsets()
                 let card = CGSize(width: geo.size.width - insets.leading - insets.trailing,
                                   height: geo.size.height - insets.top - insets.bottom)
-                Controls(model: model, card: card, wide: chrome == .window && geo.size.width >= 760)
+                Controls(model: model, card: card, wide: chrome == .window && geo.size.width >= 760, menu: chrome == .menubar)
                     .frame(width: card.width, height: card.height)
                     .opacity(model.pageError == nil ? 1 : 0)
                     .allowsHitTesting(model.pageError == nil)
@@ -41,6 +41,8 @@ private struct Controls: View {
     let card: CGSize
     /// A wide window: the controls in a column beside the model instead of under it.
     let wide: Bool
+    /// The floor plan menu: in the popover only, since the window has a sidebar for all of it.
+    let menu: Bool
 
     var body: some View {
         // style.css: `--stage-h: min(408px, 52%)`; the panel starts 34 px above the stage's end.
@@ -53,7 +55,7 @@ private struct Controls: View {
                     if wide { Rectangle().fill(P.line).frame(width: 1).padding(.top, -82) }
                 }
                 .offset(x: wide ? card.width - side : 0, y: wide ? 82 : stage - 34)
-            Header(model: model).frame(width: card.width)
+            Header(model: model, menu: menu).frame(width: card.width)
             if let toast = model.toast {
                 ToastView(toast: toast)
                     .allowsHitTesting(false)
@@ -93,6 +95,7 @@ private struct Controls: View {
 /// power button, which step aside while a sheet is open.
 private struct Header: View {
     let model: HomeModel
+    let menu: Bool
 
     var body: some View {
         let detail = model.sheet != nil
@@ -103,8 +106,13 @@ private struct Header: View {
                     .frame(width: 34, height: 34)
                     .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(P.glassHi))
                     .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(P.line))
+                    .allowsHitTesting(false)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(model.config.name).font(.system(size: 16, weight: .semibold)).kerning(-0.16).foregroundStyle(P.text).lineLimit(1)
+                    HStack(spacing: 8) {
+                        Text(model.config.name).font(.system(size: 16, weight: .semibold)).kerning(-0.16).foregroundStyle(P.text).lineLimit(1)
+                            .allowsHitTesting(false)
+                        if model.demo { DemoPill(canLeave: model.hasOwnHome) { model.onBackHome?() } }
+                    }
                     HStack(spacing: 6) {
                         LiveDot(on: model.anyOn)
                         (Text(model.lightsOn > 0 ? "\(model.lightsOn) of \(model.config.lights.count)" : "No").foregroundColor(P.text).fontWeight(.semibold)
@@ -114,16 +122,16 @@ private struct Header: View {
                     }
                     .font(.system(size: 12).monospacedDigit())
                     .foregroundStyle(P.muted)
+                    .allowsHitTesting(false)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .allowsHitTesting(false)
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: .contain)
             Group {
                 if model.agentLive { AIBadge { model.onAgentBadge?() } }
                 RoundButton(icon: model.outside ? "door" : "trees", active: model.outside,
                             label: model.outside ? "Inside: the rooms" : "Outside: the house and its cameras") { model.toggleOutside() }
-                RoundButton(icon: "settings", label: "Floor plan menu") { model.onGear?() }
+                if menu { RoundButton(icon: "settings", label: "Floor plan menu") { model.onGear?() } }
                 RoundButton(icon: "power", size: 46, iconSize: 21, stroke: 2.2, lit: model.anyOn, label: "Everything on / off") { model.toggleEverything() }
             }
             .opacity(detail ? 0 : 1)
@@ -137,6 +145,43 @@ private struct Header: View {
 }
 
 /// `.ai-badge`: an AI assistant has a live link; click to manage it.
+/// Beside the home's name while a demo is shown: easy to tell from your own home, and one click
+/// away from it. Over the pointer it says so ("Back to My home"); without a home of your own it
+/// only says Demo.
+struct DemoPill: View {
+    let canLeave: Bool
+    var compact = false
+    let action: () -> Void
+    @StateObject private var hover = Hover()
+
+    var body: some View {
+        let open = canLeave && hover.on
+        Button(action: action) {
+            HStack(spacing: 3) {
+                if open { Icon("back", size: compact ? 10 : 11, stroke: 2.6).transition(.opacity) }
+                Text(open ? "Back to My home" : "DEMO")
+                    .font(.system(size: compact ? 9.5 : 10.5, weight: .bold))
+                    .kerning(open ? 0 : 0.8)
+                    .lineLimit(1)
+            }
+            .foregroundStyle(P.warm)
+            .padding(.horizontal, compact ? 6 : 7)
+            .frame(height: compact ? 17 : 19)
+            .background(Capsule().fill(P.warm.opacity(open ? 0.24 : 0.14)))
+            .overlay(Capsule().strokeBorder(P.warm.opacity(0.35)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PressScale(scale: 0.94))
+        .disabled(!canLeave)
+        .onHover { hover.on = $0 }
+        .animation(P.spring, value: open)
+        .help(canLeave ? "A demo: everything is simulated. Click to go back to My home." : "A demo: everything is simulated.")
+        .accessibilityLabel("Demo")
+        .accessibilityHint(canLeave ? "Goes back to My home" : "")
+        .fixedSize()
+    }
+}
+
 private struct AIBadge: View {
     let action: () -> Void
     @StateObject private var glow = Hover()

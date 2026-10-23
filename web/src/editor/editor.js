@@ -1704,8 +1704,10 @@ export async function bootEditor(root) {
       toast('Browser preview: the plan was downloaded instead of applied');
       return;
     }
+    if (editingDemo && !(await askToKeepDemo())) return;
     try {
       await call('savePlan', { config: doc });
+      editingDemo = false;
       dirty = false;
       validate();
       haptic('success');
@@ -1713,6 +1715,37 @@ export async function bootEditor(root) {
     } catch (e) {
       toast(e.message, true);
     }
+  }
+
+  // A demo saved becomes My home, in place of the one there is: asked first, never by accident.
+  let editingDemo = Boolean(window.__HOUSE_BOOT__?.plan) && window.__HOUSE_BOOT__.plan !== 'custom';
+  function askToKeepDemo() {
+    const replacing = Boolean(window.__HOUSE_BOOT__?.hasCustomPlan);
+    return new Promise((resolve) => {
+      const done = (ok) => {
+        el.classList.remove('open');
+        setTimeout(() => el.remove(), 200);
+        document.removeEventListener('keydown', onKey, true);
+        resolve(ok);
+      };
+      const onKey = (ev) => {
+        if (ev.key === 'Escape') { ev.stopPropagation(); done(false); }
+      };
+      const el = h('div.ask', { onclick: (ev) => { if (ev.target === el) done(false); } },
+        h('div.ask-card', { role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': 'ask-title' },
+          h('b', { id: 'ask-title' }, replacing ? 'Replace My home?' : 'Make this My home?'),
+          h('p', replacing
+            ? 'You are editing a demo. Saving makes it your home instead of the one you have now, and that home’s links to real devices go with it.'
+            : 'You are editing a demo. Saving makes this copy your own home; the demo stays as it was.'),
+          h('div.ask-actions',
+            h('button.btn', { onclick: () => done(false) }, 'Cancel'),
+            h(`button.btn.primary${replacing ? '.destructive' : ''}`, { onclick: () => { haptic('medium'); done(true); } },
+              replacing ? 'Replace My home' : 'Make it My home'))));
+      document.body.append(el);
+      document.addEventListener('keydown', onKey, true);
+      requestAnimationFrame(() => el.classList.add('open'));
+      el.querySelector('.btn.primary').focus();
+    });
   }
 
   function download() {

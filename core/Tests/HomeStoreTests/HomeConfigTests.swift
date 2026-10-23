@@ -177,6 +177,16 @@ struct HomeConfigTests {
         #expect(config.acs.map(\.linked) == [true, false])
     }
 
+    @Test func linkedCountsLampsACsAndEnergySensors() {
+        let config = HomeConfig(plan: [
+            "lights": [["id": "a", "link": ["service": "ha", "id": "light.a"]], ["id": "b"]],
+            "acs": [["id": "ac", "tuya": ["deviceId": "x"]]],
+            "energy": ["sensors": ["solar": ["service": "ha", "id": "sensor.pv"], "grid": ["service": "ha", "id": "sensor.grid"]]],
+        ])
+        #expect(config.linkedCount == 4)
+        #expect(HomeConfig(plan: [:]).linkedCount == 0)
+    }
+
     @Test func stateAndStatusComeFromTheStore() {
         let store = HomeStore(plan: ["lights": [["id": "a", "capabilities": ["brightness"]], ["id": "p"]]], file: nil, transmit: nil)
         store.setLight("a", ["on": true, "brightness": 0.42])

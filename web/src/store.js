@@ -39,9 +39,10 @@ export function createStore(config) {
   for (const a of config.acs) state.acs[a.id] = defaultAC(a, config.outdoorTemp);
   // What each real AC can do, as reported by the native side. A simulated AC can do everything.
   const features = {};
-  // Off (the iPhone's Settings): the lamps and ACs linked to nothing real stay off and cannot be
-  // switched, and a power flow without sensors is not made up. In the Mac app, the app does that.
-  let simulates = nativeState || window.__HOUSE_BOOT__?.simulateUnlinked !== false;
+  // Off (My home in the iPhone app, which is not a demo): the lamps and ACs linked to nothing real
+  // stay off and cannot be switched, and a power flow without sensors is not made up. In the Mac
+  // app, the app does that.
+  const simulates = nativeState || window.__HOUSE_BOOT__?.simulateUnlinked !== false;
   const linked = (id) => isLinked(lightCfg.get(id) || acCfg.get(id));
   const live = (id) => simulates || linked(id);
 
@@ -86,7 +87,7 @@ export function createStore(config) {
   } catch { /* storage unavailable: start from defaults */ }
   const booted = nativeState && window.__HOUSE_BOOT__?.state;
   if (booted) { take(booted); takeEnergy(booted.energy); restored = true; }
-  // What was saved while simulating is not shown once simulation is off.
+  // What was saved while simulating is not shown without simulation.
   function switchOffUnlinked() {
     for (const id of Object.keys(state.lights)) if (!linked(id)) state.lights[id].on = false;
     for (const id of Object.keys(state.acs)) if (!linked(id)) state.acs[id].on = false;
@@ -245,19 +246,6 @@ export function createStore(config) {
     /** Who is changing things right now when it is not the person at this screen ("ChatGPT"…). */
     source: null,
 
-    /** Lamps, ACs and a power flow linked to nothing real are simulated (else "Not linked"). */
-    get simulatesUnlinked() { return simulates; },
-    setSimulatesUnlinked(on) {
-      if (nativeState || simulates === on) return;
-      simulates = on;
-      if (on) {
-        energyAt = 0;
-        if (energySim) simulateEnergy();
-      } else {
-        switchOffUnlinked();
-      }
-      emit({ type: 'bulk' });
-    },
     /** A lamp or an AC linked to nothing real, while nothing is simulated: it cannot be switched. */
     notLinked(id) { return !live(id); },
     /** The power flow has no sensors and is not simulated either. */

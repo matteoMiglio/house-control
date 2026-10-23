@@ -37,6 +37,8 @@ final class HomeModel {
     /// The header's gear (the floor plan menu) and AI badge.
     @ObservationIgnored var onGear: (() -> Void)?
     @ObservationIgnored var onAgentBadge: (() -> Void)?
+    /// The Demo pill: back to My home.
+    @ObservationIgnored var onBackHome: (() -> Void)?
 
     private(set) var config = HomeConfig(plan: [:])
     private(set) var lights: [String: LightState] = [:]
@@ -46,8 +48,12 @@ final class HomeModel {
     private(set) var energy = EnergyState()
     /// The thermostat's reading in °C; nil without one.
     private(set) var houseTemp: Double?
-    /// Off: what is linked to nothing real shows "Not linked" instead of being simulated (Settings).
+    /// A demo: what is linked to nothing real is simulated. In My home it shows "Not linked".
     var simulatesUnlinked = true
+    /// A bundled demo is shown, not My home.
+    var demo = false
+    /// There is a My home to go back to from a demo.
+    var hasOwnHome = false
 
     /// The group the device list shows: "all" or a group id.
     private(set) var room = "all"

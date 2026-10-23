@@ -223,7 +223,7 @@ struct DevicePicker: View {
         NavigationStack {
             List {
                 Section {
-                    option(nil, name: kind == "sensor" ? "None — estimated" : "Not linked — simulated", detail: nil, symbol: "circle.dashed")
+                    option(nil, name: kind == "sensor" ? "None — estimated" : "Not linked", detail: nil, symbol: "circle.dashed")
                 }
                 ForEach(["smartlife", "homeassistant", "hue", "homekit"], id: \.self) { service in
                     let list = candidates.filter { $0.service == service }

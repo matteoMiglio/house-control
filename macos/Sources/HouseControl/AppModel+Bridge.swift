@@ -34,11 +34,7 @@ extension AppModel {
             // Escape in the panel closes it; in the main window the page stays.
             dismissPanel()
         case "selectPlan":
-            if let plan = message["plan"] as? String {
-                plans.select(plan)
-                reloadAll()
-                hosts[.editor]?.load()
-            }
+            if let plan = message["plan"] as? String { choosePlan(plan) }
         case "loadPlan": loadPlan()
         case "openAgent": router.show(.agent)
         case "openWindow": router.show(.home)

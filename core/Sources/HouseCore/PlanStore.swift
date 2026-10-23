@@ -36,6 +36,9 @@ public final class PlanStore {
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 
+    /// A bundled demo is shown: everything in it is simulated, whatever the settings say.
+    public var isDemo: Bool { activePlan != "custom" }
+
     public var hasCustomPlan: Bool { FileManager.default.fileExists(atPath: customPlanURL.path) }
 
     /// The name the user gave their home, for menus.

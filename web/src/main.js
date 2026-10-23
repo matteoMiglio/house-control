@@ -147,7 +147,6 @@ async function boot() {
     window.addEventListener('pointercancel', () => { edge = null; }, true);
   }
   incoming.applyRemote = (update) => store.applyRemote(update);
-  incoming.setSimulateUnlinked = (on) => store.setSimulatesUnlinked(on);
   incoming.adopt = (state) => store.adopt(state);
   incoming.share = () => store.share();
   incoming.sync = (next) => store.sync(next);

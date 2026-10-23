@@ -25,16 +25,18 @@ extension AppModel {
                               })
         store.onChange = { [weak self] change in self?.schedulePush(change) }
         store.onDeviceError = { [weak self] id, message in self?.home.deviceError(id, message) }
-        store.simulatesUnlinked = simulatesUnlinked
+        store.simulatesUnlinked = simulatesHere
         store.startSimulation()
         homeStore = store
-        home.simulatesUnlinked = simulatesUnlinked
+        home.simulatesUnlinked = simulatesHere
+        home.demo = plans.isDemo
+        home.hasOwnHome = plans.hasCustomPlan
         home.load(plan: plan ?? [:], store: store)
         islandModel?.reset()
         updateStatus(store.summary)
     }
 
-    private func demoPlan(_ id: String) -> [String: Any]? {
+    func demoPlan(_ id: String) -> [String: Any]? {
         guard let data = try? Data(contentsOf: WebHost.assetRoot.appendingPathComponent("plans/\(id).json")) else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }

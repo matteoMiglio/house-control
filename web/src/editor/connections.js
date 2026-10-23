@@ -95,7 +95,7 @@ export function createConnections({ rerender, toast, usedBy, onOpen }) {
         h('div.svc-text', h('b', SERVICES[id].name), h('span', LOOK[id].blurb)),
         h(`span.svc-status${connected(id) ? '.on' : ''}`, connected(id) ? icon('ok', 13, 2.4) : null, statusText(id)),
         icon('next', 16)))),
-      h('p.note', 'Lamps and ACs stay simulated until you link them: pick one on the plan, then choose its device under “Real device”. One home can mix them all.'),
+      h('p.note', 'Lamps and ACs show “Not linked” until you link them (in the demos they are simulated): pick one on the plan, then choose its device under “Real device”. One home can mix them all.'),
       isNative ? null : h('p.note.bad', 'Connecting works inside the House Control app (this is the browser preview).'),
     ];
   }

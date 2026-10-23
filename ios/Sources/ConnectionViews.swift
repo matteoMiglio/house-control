@@ -194,7 +194,7 @@ struct HomeAssistantView: View {
                 .confirmationDialog("Disconnect Home Assistant?", isPresented: $confirmDisconnect, titleVisibility: .visible) {
                     Button("Disconnect", role: .destructive) { model.disconnect(service: "homeassistant") }
                 } message: {
-                    Text("Its devices go back to being simulated, here and on your paired Mac.")
+                    Text("Its devices show “Not linked” again, here and on your paired Mac.")
                 }
             Footnote(text: "Connected on this iPhone or on your Mac, it works on both: they share the connection over their encrypted link.")
         }
@@ -401,7 +401,7 @@ struct HueView: View {
                 .confirmationDialog("Disconnect the Hue Bridge?", isPresented: $confirmDisconnect, titleVisibility: .visible) {
                     Button("Disconnect", role: .destructive) { model.disconnect(service: "hue") }
                 } message: {
-                    Text("Its lamps go back to being simulated, here and on your paired Mac.")
+                    Text("Its lamps show “Not linked” again, here and on your paired Mac.")
                 }
         }
         .transition(.opacity)

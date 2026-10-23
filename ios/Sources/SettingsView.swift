@@ -95,21 +95,6 @@ struct SettingsView: View {
                 }
                 .buttonStyle(RowButtonStyle())
             }
-            Card {
-                HStack(spacing: 14) {
-                    IconBadge(symbol: "wand.and.stars", tint: Theme.accent)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Simulate unlinked devices").font(.system(size: 16.5, weight: .semibold)).foregroundStyle(Theme.text)
-                        Text(model.simulatesUnlinked ? "They behave as if they were real" : "They show “Not linked”")
-                            .font(.system(size: 13.5)).foregroundStyle(Theme.muted).lineLimit(1)
-                    }
-                    Spacer(minLength: 8)
-                    Toggle("Simulate unlinked devices", isOn: Binding(get: { model.simulatesUnlinked }, set: { model.setSimulatesUnlinked($0) }))
-                        .labelsHidden().tint(Theme.accent)
-                }
-                .padding(.horizontal, 14)
-                .frame(minHeight: 66)
-            }
             HStack(spacing: 10) {
                 Button { newHome = true } label: { Label("New home", systemImage: "plus") }
                     .buttonStyle(SecondaryButtonStyle())

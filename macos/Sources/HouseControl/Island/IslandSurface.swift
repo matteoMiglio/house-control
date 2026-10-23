@@ -315,6 +315,7 @@ private struct Head: View {
             HStack(spacing: 8) {
                 Icon("home", size: 14).foregroundStyle(model.mood.withWhite(0.6))
                 Text(home.config.name).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(P.text).lineLimit(1)
+                if home.demo { DemoPill(canLeave: home.hasOwnHome, compact: true) { home.onBackHome?() } }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Color.clear.frame(width: model.notchWidth)

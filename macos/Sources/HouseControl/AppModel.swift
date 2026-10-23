@@ -74,14 +74,14 @@ final class AppModel: NSObject {
     var islandShown = false
     /// What the closed island's right ear shows: Auto, AC or Solar (Settings).
     var islandEar = AppModel.storedIslandEar
-    /// Lamps, ACs and a power flow linked to nothing real are simulated, or show "Not linked" (Settings).
-    var simulatesUnlinked = AppModel.storedSimulatesUnlinked
     /// The main window's sidebar: which screen it shows, and whether it is shown at all (left as
     /// the user leaves it, with the toolbar's sidebar button).
     var section: MainSection = .home
     var sidebar: NavigationSplitViewVisibility = .all
     /// The home's name, for the main window's title.
     var homeName = "Home"
+    /// Goes up whenever the homes changed (switched, imported, removed), so the Floor Plans screen redraws.
+    var homesVersion = 0
     /// Set by the delegate when macOS started the app as a login item: no window opens then.
     @ObservationIgnored var launchedAtLogin = false
     @ObservationIgnored var mainWindow: MainWindowController?
@@ -134,6 +134,7 @@ final class AppModel: NSObject {
                 if !self.statusItem.isVisible { self.showMainWindow(.home) } else if !self.panel.isVisible { self.togglePanel() }
             case .editor: self.showMainWindow(.editor)
             case .connections(let service): self.openConnections(service)
+            case .homes: self.showMainWindow(.homes)
             case .agent: self.showMainWindow(.agent)
             case .pairing: self.showMainWindow(.pairing)
             case .settings: self.showMainWindow(.settings)
@@ -329,6 +330,7 @@ final class AppModel: NSObject {
         reload.keyEquivalentModifierMask = .option
         reload.isAlternate = true
         menu.addItem(.separator())
+        menu.addItem(homesMenuItem())
         menu.addItem(withTitle: "Edit Home…", action: #selector(requestEditor), keyEquivalent: "").target = self
         let aiItem = menu.addItem(withTitle: agent.isLive ? "AI Access — Live" : "AI Access…", action: #selector(requestAgent), keyEquivalent: "")
         aiItem.target = self
@@ -386,6 +388,7 @@ final class AppModel: NSObject {
         storedConnections?.plan = homePlan
         hub.setLinks(from: plans.activePlan == "custom" ? plans.customPlan() : nil)
         homeName = plans.activePlan == "custom" ? (plans.customPlanName ?? "My home") : "Demo home"
+        homesVersion += 1
         setPolling(false) // reads at once while something shows the devices, or a thermostat is linked
     }
 
@@ -411,9 +414,12 @@ final class AppModel: NSObject {
         open.allowedContentTypes = [.json]
         guard open.runModal() == .OK, let url = open.url else { return }
         do {
-            try plans.importPlan(from: url)
+            let plan = try PlanStore.validate(try Data(contentsOf: url))
+            guard confirmReplacingHome(with: url.deletingPathExtension().lastPathComponent) else { return }
+            try plans.saveCustom(plan)
             reloadAll()
             hosts[.editor]?.load()
+            home.showToast(homeName)
         } catch {
             alert("Could not load this floor plan", error.localizedDescription)
         }
@@ -530,19 +536,8 @@ final class AppModel: NSObject {
         islandModel?.earChoice = choice
     }
 
-    /// On unless turned off in Settings (or by HOUSE_SIMULATE=0 for one run).
-    private static var storedSimulatesUnlinked: Bool {
-        if let raw = ProcessInfo.processInfo.environment["HOUSE_SIMULATE"] { return raw != "0" }
-        return UserDefaults.standard.object(forKey: "simulateUnlinked") as? Bool ?? true
-    }
-
-    func setSimulatesUnlinked(_ on: Bool) {
-        // A run with its own data folder (HOUSE_DATA_DIR, for tests) leaves the real setting alone.
-        if ProcessInfo.processInfo.environment["HOUSE_DATA_DIR"] == nil { UserDefaults.standard.set(on, forKey: "simulateUnlinked") }
-        simulatesUnlinked = on
-        homeStore?.simulatesUnlinked = on
-        home.simulatesUnlinked = on
-    }
+    /// A demo simulates everything; My home only shows what is real, and "Not linked" for the rest.
+    var simulatesHere: Bool { plans.isDemo }
 
     // MARK: - Open at Login
 

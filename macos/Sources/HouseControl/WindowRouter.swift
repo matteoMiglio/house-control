@@ -9,7 +9,7 @@ final class WindowRouter {
     enum Destination {
         /// `home` is the main window; `panel` the popover under the menu bar icon; `connections`
         /// opens one platform's screen when it names one.
-        case home, panel, editor, connections(service: String?), agent, pairing, settings
+        case home, panel, homes, editor, connections(service: String?), agent, pairing, settings
     }
 
     private(set) var ready = false

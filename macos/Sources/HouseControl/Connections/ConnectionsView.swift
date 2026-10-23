@@ -61,7 +61,7 @@ private struct ConnectionsOverview: View {
             }
 
             VStack(alignment: .leading, spacing: 12) {
-                Footnote("Lamps and ACs stay simulated until you link them: pick one in Edit Home, then choose its device under “Real device”. One home can mix them all.")
+                Footnote("Lamps and ACs show “Not linked” until you link them (in the demos they are simulated): pick one in Edit Home, then choose its device under “Real device”. One home can mix them all.")
                 Button { model.openEditor?() } label: { Label("Edit Home", systemImage: "square.and.pencil") }
                     .buttonStyle(.bordered)
             }
